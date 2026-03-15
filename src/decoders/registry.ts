@@ -8,6 +8,6 @@ export function getBundledDecoder(name: string): Decoder | undefined {
   return bundled.get(name);
 }
 
-function listBundledDecoders(): string[] {
+export function listBundledDecoders(): string[] {
   return Array.from(bundled.keys());
 }
