@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>bctrace visualizer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Ubuntu+Sans+Mono:wght@400..700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/src/style.css">
+</head>
+<body>
+<div id="app">
+  <!-- Toolbar -->
+  <div id="toolbar">
+    <label id="file-label" for="file-input">Load .bctrace</label>
+    <input type="file" id="file-input" accept=".bctrace,.gz">
+    <span id="file-name"></span>
+    <select id="msg-select" disabled style="display:none"></select>
+    <div class="tb-sep"></div>
+    <button class="tb-btn" id="btn-play" disabled>Play</button>
+    <button class="tb-btn" id="btn-reset" disabled title="Reset to start">Reset</button>
+    <select id="speed-select" disabled>
+      <option value="0.1">0.1x</option>
+      <option value="0.25">0.25x</option>
+      <option value="0.5">0.5x</option>
+      <option value="1" selected>1x</option>
+      <option value="10">10x</option>
+      <option value="100">100x</option>
+      <option value="1000">1000x</option>
+    </select>
+    <div class="tb-sep"></div>
+    <span id="time-display">--</span>
+  </div>
+
+  <!-- Main area -->
+  <div id="main">
+    <!-- Stats panel -->
+    <div id="stats-panel">
+      <h2>Statistics</h2>
+    </div>
+
+    <!-- Map -->
+    <div id="map-container">
+      <div id="mode-switcher">
+        <button class="mode-tab active" data-mode="force">Force</button>
+        <button class="mode-tab" data-mode="hops">Hops</button>
+        <button class="mode-tab" data-mode="latency">Latency</button>
+        <button class="mode-tab" data-mode="race">Race</button>
+      </div>
+      <canvas id="deck-canvas"></canvas>
+      <canvas id="ring-canvas"></canvas>
+      <div id="empty-state">
+        <h1>bctrace visualizer</h1>
+        <p>Load a .bctrace or .bctrace.gz file to begin</p>
+      </div>
+      <div id="load-progress" aria-live="polite">
+        <div id="lp-title">Loading trace</div>
+        <div id="lp-status"></div>
+        <div id="lp-bar"><div id="lp-fill"></div></div>
+      </div>
+      <div id="node-legend">
+        <div class="nl-titlebar">
+          <span class="nl-title">Legend</span>
+          <button id="settings-btn" title="Graph settings">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M7.07 0l-.59 2.12A5.97 5.97 0 004.6 3.26L2.53 2.35.93 5.12l1.78 1.24a6.1 6.1 0 000 3.28L.93 10.88l1.6 2.77 2.07-.91a5.97 5.97 0 001.88 1.14L7.07 16h3.2l.59-2.12a5.97 5.97 0 001.88-1.14l2.07.91 1.6-2.77-1.78-1.24a6.1 6.1 0 000-3.28l1.78-1.24-1.6-2.77-2.07.91a5.97 5.97 0 00-1.88-1.14L10.27 0H7.07zM8.67 5.33a2.67 2.67 0 110 5.34 2.67 2.67 0 010-5.34z"/></svg>
+          </button>
+        </div>
+        <div id="legend-fills"></div>
+        <div id="legend-rings"></div>
+        <div id="settings-panel"></div>
+      </div>
+      <div id="tooltip"></div>
+      <!-- Timeline (floating overlay) -->
+      <div id="timeline-bar">
+        <div id="tl-scrubber">
+          <div id="tl-track-wrap">
+            <input type="range" id="timeline" min="0" max="1000000" value="0" step="1" disabled>
+            <div id="tl-markers"></div>
+          </div>
+          <span id="tl-time">0.000s</span>
+        </div>
+      </div>
+      <!-- Milestones panel -->
+      <div id="tl-legend"></div>
+    </div>
+
+    <!-- Event log -->
+    <div id="event-log">
+      <div id="event-log-header">
+        <span>Event log</span>
+        <span class="clear-filter" id="clear-filter">clear filter</span>
+      </div>
+      <div id="event-type-filter"></div>
+      <div id="event-log-list"></div>
+      <div id="country-dist"></div>
+      <div id="bw-dist"></div>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="/src/app.ts"></script>
+</body>
+</html>
