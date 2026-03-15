@@ -1,5 +1,6 @@
 import type { AppStore } from '../store';
 import type { EventLogState } from './events-panel';
+import type { DecoderPicker, ResolvedDecoder } from './decoder-picker';
 import type { DecoderOutput, CanonicalHeader, DecodeOptions } from '../decoder-sdk';
 import { EVENT_STRIDE, OP_PROGRESS } from '../decoder-sdk';
 import { buildTimeIndex, buildEventIndex } from '../trace';
@@ -21,6 +22,7 @@ export function initFileLoader(deps: {
   store: AppStore;
   eventLogState: EventLogState;
   updateAll: () => void;
+  picker: DecoderPicker;
   renderCountryDist: (header: CanonicalHeader) => void;
   renderBwDist: (header: CanonicalHeader) => void;
   renderMilestones: (milestones: DecoderOutput['milestones'], min: number, max: number) => void;
@@ -53,6 +55,7 @@ export function initFileLoader(deps: {
 
   let worker: Worker | null = null;
   let rawLines: string[] = [];
+  let resolvedDecoder: ResolvedDecoder | null = null;
   let previewShown = false;
   let latestLoadToken = 0;
 
@@ -119,18 +122,17 @@ export function initFileLoader(deps: {
     return worker;
   }
 
-  function resolveDecoderName(lines: string[]): string {
-    const firstLine = lines[0] ?? '';
+  function extractDecoderName(lines: string[]): string | undefined {
     try {
-      const parsed = JSON.parse(firstLine);
+      const parsed = JSON.parse(lines[0] ?? '');
       if (typeof parsed?.decoderName === 'string') return parsed.decoderName;
     } catch {
       // Not JSON or missing field
     }
-    return 'ethp2p';
+    return undefined;
   }
 
-  function runDecode(lines: string[], options?: DecodeOptions) {
+  function runDecode(lines: string[], resolved: ResolvedDecoder, options?: DecodeOptions) {
     const w = ensureWorker();
 
     w.onmessage = (e: MessageEvent<{ kind: 'progress'; label: string; percent?: number; indeterminate?: boolean } | { kind: 'result'; output: DecoderOutput } | { kind: 'error'; message: string }>) => {
@@ -146,7 +148,6 @@ export function initFileLoader(deps: {
       }
 
       const output = message.output;
-      // User decoders may return plain arrays; coerce to typed arrays for perf.
       if (output.events.eventTypeIdxs && !(output.events.eventTypeIdxs instanceof Int16Array)) {
         output.events.eventTypeIdxs = new Int16Array(output.events.eventTypeIdxs);
       }
@@ -162,9 +163,10 @@ export function initFileLoader(deps: {
     };
 
     w.postMessage({
+      kind: 'decode',
       lines,
-      decoderSrc: null,
-      decoderName: resolveDecoderName(lines),
+      decoderSrc: resolved.kind === 'user' ? resolved.source : null,
+      decoderName: resolved.kind === 'bundled' ? resolved.name : undefined,
       options,
     });
   }
@@ -374,9 +376,12 @@ export function initFileLoader(deps: {
     try {
       const text = await readFileText(file, loadToken);
       if (loadToken !== latestLoadToken) return;
-      setLoadProgress('Preparing decode...', 0.48);
+      setLoadProgress('Resolving decoder...', 0.48);
       rawLines = text.split('\n');
-      runDecode(rawLines);
+      const decoderName = extractDecoderName(rawLines);
+      resolvedDecoder = await deps.picker.resolve(decoderName);
+      if (loadToken !== latestLoadToken) return;
+      runDecode(rawLines, resolvedDecoder);
     } catch (err) {
       console.error('Failed to load trace:', err);
       hideLoadProgress();
@@ -385,10 +390,19 @@ export function initFileLoader(deps: {
   });
 
   msgSelect.addEventListener('change', () => {
+    if (!resolvedDecoder) return;
     store.playing = false;
     setLoadProgress('Decoding selected message...', undefined, true);
-    runDecode(rawLines, { messageId: msgSelect.value });
+    runDecode(rawLines, resolvedDecoder, { messageId: msgSelect.value });
   });
+
+  deps.picker.onSwitch = (decoder) => {
+    if (rawLines.length === 0) return;
+    resolvedDecoder = decoder;
+    resetLoadingUi();
+    setLoadProgress('Re-decoding with ' + decoder.name + '...', undefined, true);
+    runDecode(rawLines, decoder);
+  };
 
   async function readFileText(file: File, loadToken: number): Promise<string> {
     let headerParsed = false;
@@ -402,7 +416,8 @@ export function initFileLoader(deps: {
       } catch {
         return;
       }
-      const decoderName = typeof rawHeader.decoderName === 'string' ? rawHeader.decoderName : 'ethp2p';
+      const decoderName = typeof rawHeader.decoderName === 'string' ? rawHeader.decoderName : undefined;
+      if (!decoderName) return;
       const preview = buildBundledDecoderPreview(decoderName, rawHeader);
       if (!preview) return;
       setLoadProgress('Drawing initial graph...', 0.18);

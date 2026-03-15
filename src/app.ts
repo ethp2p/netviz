@@ -7,6 +7,7 @@ import { getEl } from './ui/dom';
 import { createEventLogState, updateEventLog, rebuildEventLog, initEventsPanel } from './ui/events-panel';
 import { initPlayback } from './ui/playback';
 import { initFileLoader } from './ui/file-loader';
+import { initDecoderPicker } from './ui/decoder-picker';
 import { initKeyboard } from './ui/keyboard';
 import { initSettings } from './ui/settings';
 import { initModeSwitcher } from './ui/mode-switcher';
@@ -176,10 +177,12 @@ function clearSelection() {
 const playback = initPlayback({ store, eventLogState, updateAll });
 const eventsPanel = initEventsPanel({ store, eventLogState, drawOverlayNow, renderLayers });
 const settings = initSettings({ store, drawOverlayNow, renderLayers });
+const picker = await initDecoderPicker();
 initFileLoader({
   store,
   eventLogState,
   updateAll,
+  picker,
   renderCountryDist: renderCountryDistribution,
   renderBwDist: renderBandwidthDistribution,
   renderMilestones: (milestones, min, max) =>
