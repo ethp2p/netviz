@@ -1,67 +1,117 @@
-# bctrace visualizer
+# netviz
 
-A broadcast simulation produces thousands of chunk-send, chunk-receive, session, and routing events across hundreds of nodes in under a second. Reading that as a log is like reading a symphony as a list of frequencies. We need a spatial, temporal, interactive representation to understand what actually happened during propagation.
+Interactive visualization engine for network protocol simulations. Feed it a topology and a stream of events (state transitions, transfers, metrics, link changes) and netviz renders them as a GPU-accelerated network graph with time-scrubable playback, synchronized charts, live statistics, and a filtered event log.
 
-**The visualizer replays `.bctrace` files as an interactive, time-scrubable dashboard: a GPU-rendered network graph, live statistics, filtered event log, and synchronized bandwidth/CDF charts.**
+The network graph renders through deck.gl, which targets WebGL 2 and falls back to WebGL 1. deck.gl was chosen over raw WebGL or Three.js because it provides a declarative layer system designed for data visualization: scatter plots, line layers, and custom particle effects compose naturally, and its internal diffing means only changed layers trigger GPU uploads on each frame. This matters here because the graph redraws on every animation frame during playback, with hundreds of nodes, edges, and in-flight transfer particles updating simultaneously. Canvas 2D handles the overlay layer (ring glyphs, text labels, hop separators) where pixel-precise rendering and native font support are needed.
+
+The engine is protocol-agnostic. A pluggable decoder SDK defines how raw trace data maps to the canonical event model. Bundled decoders are auto-detected from the trace file header; user-supplied decoders can be loaded as `.js` files and are persisted in IndexedDB across sessions. Adding support for a new protocol means implementing one function: `decode(lines) → DecoderOutput`.
 
 ## Getting started
 
-```
-npm install
-npm run dev
+```bash
+bun install
+bun dev
 ```
 
-Open the browser, click "Load .bctrace", and pick a trace file (`.bctrace` or `.bctrace.gz`). The simulator writes these when tracing is enabled (see `sim/trace_writer.go`). Sample traces are included in this directory.
+Open the browser and load a trace file. If the file header contains a `decoderName` field matching a bundled or saved decoder, it is used automatically. Otherwise, a decoder picker appears for manual selection.
+
+The bundled ethp2p decoder accepts `.bctrace` and `.bctrace.gz` files produced by the ethp2p simulator. To use a custom decoder, click the decoder button in the toolbar and load a `.js` file that exports a `Decoder` object.
 
 Keyboard shortcuts: Space to play/pause, arrow keys to step (100ms per press), `f` to fit the viewport, Escape to clear the selected node.
 
-## The trace format
+## Decoder SDK
 
-A `.bctrace` file is NDJSON with three sections:
+The decoder SDK defines the contract between trace formats and the visualization engine. A decoder receives raw lines and produces a `DecoderOutput`:
 
-1. A **header line**: schema version, wall-clock start time, node names, full topology (nodes with bandwidth specs, edges with latencies), and the simulation config.
-2. **Event lines**: compact JSON tuples `[timestamp_us, node_idx, event_code, ...fields]`. Timestamps are microseconds since t0. Event codes are two-letter mnemonics: `ss` (session started), `sd` (session decoded), `cs` (chunk sent), `cr` (chunk received), `ru` (routing update), and so on.
-3. An optional **footer line**: marks the end, records total duration and a byte-offset index for seeking.
+- **CanonicalHeader**: node specs (name, properties), edges (source, target, latency), and arbitrary metadata.
+- **PackedEvents**: a strided `Float64Array` (6 floats per event: timestamp, node, opcode, field1, field2, field3) plus optional log texts and peer indexes.
+- **StateDef[]**: named node states with colors, terminal flags, and stats grouping.
+- **ArcLayerDef[]**: animated transfer layers (color, lifetime, travel time, radius).
+- **MetricDef[]**: per-node metrics (count, bytes, or rate) with optional ring overlays.
+- **Milestones**: labeled time markers on the playback timeline.
+- **ChartHints**: tells the engine which state is the CDF target, which arc layer drives bandwidth charts, and which node is the origin.
 
-The Go side (`sim/trace_observer.go`) implements the `broadcast.Observer` interface and writes each callback as a tuple through a mutex-protected `TraceWriter`. The TypeScript side parses the NDJSON, sorts events by timestamp (defensive against concurrent goroutine emission order), and builds several precomputed indexes for fast playback.
+Six opcodes cover the event vocabulary: `OP_STATE` (node enters a state), `OP_TRANSFER` (data moves between nodes), `OP_PROGRESS` (chunks held vs. needed), `OP_METRIC` (arbitrary numeric), `OP_LINK` (connection up/down), `OP_LOG` (free-text entry). Every protocol-specific event maps to one of these.
 
-## Four layout modes, four questions
+Decoding runs in a Web Worker so user-supplied decoders cannot block the UI. User decoder `.js` files are validated in a temporary worker before being saved to IndexedDB. Output is validated at runtime against the schema.
 
-Each layout mode answers a different question about the same propagation event.
+## Architecture
 
-**Force** uses a d3-force simulation with latency-weighted link distances. Nodes that are topologically close cluster together. This is the right view for understanding community structure and connectivity: which regions of the network are tightly coupled, which are loosely connected through high-latency links.
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         app.ts                                  │
+│           (main loop: decode → precompute → render)             │
+└─────────────────────────────────────────────────────────────────┘
+        │              │              │              │
+        ▼              ▼              ▼              ▼
+┌───────────┐  ┌───────────┐  ┌───────────┐  ┌───────────┐
+│  decoder  │  │   state   │  │    map    │  │  charts   │
+│    sdk    │  │  machine  │  │ (deck.gl) │  │   (SVG)   │
+└───────────┘  └───────────┘  └───────────┘  └───────────┘
+        │              │              │
+        ▼              ▼              ▼
+┌───────────┐  ┌───────────┐  ┌───────────┐
+│  worker/  │  │   graph/  │  │    ui/    │
+│  decode   │  │ topology  │  │  panels   │
+└───────────┘  └───────────┘  └───────────┘
+```
 
-**Hops** runs BFS from the origin and groups nodes into hex grids by hop count, with regions sized proportionally to population. Within each region, nodes are sorted by decode time. This reveals the propagation frontier: how many hops does it take to reach the whole network, and where do stragglers concentrate.
+**state.ts**: incremental state machine. On each frame, `advanceStateTo` processes only the events between the last computed index and the current time cursor. A checkpoint ring buffer (snapshot every 5000 events, 50 slots) makes backward seeks O(N/K) instead of replaying from zero.
 
-**Latency** places nodes on the X-axis by Dijkstra shortest-path latency from the origin, with a force-spread Y to avoid overlap. This is the view for correlating physical network distance with propagation speed. Nodes at similar latency that decode at very different times point to coding strategy or bandwidth bottlenecks.
+**map/**: four layout modes (see below), deck.gl WebGL rendering for nodes/edges/particles, and a Canvas 2D overlay for ring glyphs and text that deck.gl cannot provide.
 
-**Race** turns the visualization into a horizontal bar chart. Every node gets a lane; the bar extends rightward as chunks arrive, and nodes are ranked vertically by decode time. This is the purest performance comparison: who finishes first, who finishes last, and how far behind is the tail.
+**charts/**: CDF, cumulative traffic, and bandwidth rate charts driven by `ChartHints`. All data is precomputed once on file load; charts share synchronized crosshairs and a time marker tracking the playback cursor.
+
+**graph/**: topology analysis. BFS for hop counts, Dijkstra (binary min-heap) for latency, per-node bandwidth histograms.
+
+**ui/**: one module per concern (file loading, playback, event log, stats, keyboard, settings). Each sets up listeners once; the main loop calls `updateAll()` on every frame.
+
+## Four layout modes
+
+Each answers a different question about the same propagation event.
+
+**Force** uses a d3-force simulation with latency-weighted link distances. Nodes that are topologically close cluster together. This is the right view for understanding community structure: which regions are tightly coupled, which are loosely connected through high-latency links.
+
+**Hops** runs BFS from the origin and groups nodes into hex grids by hop count, with regions sized proportionally to population. This reveals the propagation frontier: how many hops to reach the whole network, and where stragglers concentrate.
+
+**Latency** places nodes on the X-axis by Dijkstra shortest-path distance from the origin, with a force-spread Y to avoid overlap. Nodes at similar latency that reach terminal state at very different times point to strategy or bandwidth bottlenecks.
+
+**Race** turns the visualization into a horizontal bar chart. Every node gets a lane; the bar extends rightward as progress increases, and nodes are ranked vertically by completion time.
 
 ## What the dashboard shows
 
-The **stats panel** (left) tracks live counters: node states (decoded, receiving, error), chunk verdicts (accepted, useless, not needed, duplicate), transfer volume, and strategy progress (min/max/avg chunks held vs. needed).
+The **stats panel** (left) tracks live counters derived from the decoder's state and metric definitions: node state populations, per-metric aggregates, and transfer volume.
 
-The **network graph** (center) renders nodes as colored dots whose fill reflects state (idle, session, receiving, decoded, error, origin). Chunk transfers appear as animated particles traveling along edges with trailing arcs. Routing updates get their own dimmer, smaller particles. Receiving nodes pulse briefly on each chunk arrival. Concentric rings around each node show chunk verdict breakdown (useful/useless/unused) against the final tally, so we can see efficiency building up in real time.
+The **network graph** (center) renders nodes as colored dots whose fill reflects state. Transfers appear as animated particles traveling along edges, with separate arc layers for different transfer types. Nodes pulse on state transitions. Concentric ring overlays show per-node metric breakdowns when the decoder defines ring metrics.
 
-The **event log** (right) streams events filtered by node selection and event type. Click a node to filter; Alt+click an event type tag for "only this type." Hovering an event entry highlights the corresponding node and peer on the graph.
+The **event log** (right) streams events filtered by node selection and event type. Click a node to filter; Alt+click a type tag for "only this type." Hovering an entry highlights the corresponding node and peer on the graph.
 
-The **charts** (below stats) are computed once on file load, scoped to the propagation window:
+The **charts** (below stats) are driven by `ChartHints` from the decoder:
 
-- A reconstruction CDF showing what fraction of nodes have decoded over time.
+- CDF: fraction of nodes reaching the terminal state over time.
 - Origin cumulative traffic (mirrored: upload above, download below the baseline).
-- Relayer cumulative traffic as percentile bands (p50 through p99), revealing how uniformly the network shares the load.
-- Origin and relayer bandwidth rate charts (1-second buckets, switchable between MB/s and Mbit/s).
+- Relayer cumulative traffic as percentile bands (p50 through p99).
+- Origin and relayer bandwidth rate (50ms buckets, switchable between MB/s and Mbit/s).
 
 All charts share synchronized crosshairs and a time marker that tracks the playback cursor.
 
-## Architecture notes
+## Implementation notes
 
-The rendering uses two layers: deck.gl (WebGL) for nodes, edges, and particle effects where we need GPU throughput for hundreds of simultaneous elements, and a Canvas 2D overlay for the ring glyphs, hop-region labels, and race-mode node names where we need pixel-precise text and arc rendering that deck.gl cannot provide.
+**Packed binary events.** Events are stored as a `Float64Array` with stride 6 (timestamp, node, opcode, field1, field2, field3). This gives O(1) random access, efficient memory layout for the hot playback loop, and a clean base for binary search on timestamps.
 
-State advances incrementally. On each frame, `advanceStateTo` processes only the events between the last computed index and the current time cursor. It never re-scans the full trace during forward playback. Backward seeks reset the state and replay from zero; this is the correct tradeoff because backward seeks are infrequent user actions while frame-to-frame advance is the hot path.
+**Precomputation on load.** Expensive work happens once: parallel timestamp array for binary search, per-node event indexes (`Int32Array`) for O(log n) filtered lookups, topology metadata (BFS hops, Dijkstra latency, bandwidth histograms), all chart data, and all layout positions. Per-frame scanning is eliminated entirely.
 
-Precomputation happens once on file load: a parallel timestamp array for binary search, per-node event indexes using exact-sized `Int32Array` for O(log n) filtered lookups, per-node verdict maxes for ring rendering, topology metadata (BFS hops, Dijkstra latency, per-node bandwidth profiles), and all chart data. These one-time costs eliminate per-frame scanning entirely.
+**Layered rendering.** deck.gl (WebGL) handles nodes, edges, and particle effects where GPU throughput matters for hundreds of simultaneous elements. Canvas 2D handles ring glyphs, hop-region labels, and race-mode node names where pixel-precise text and arc rendering are needed. DOM handles stats, controls, and the event log.
 
-The event log uses dual strategies: forward playback appends new events incrementally (capped at 500 DOM elements), while backward seeks use the per-node index for binary search and walk backwards collecting matches. At extreme playback speeds, the scanning window is capped to accept that some filtered entries may not appear in the log, which is acceptable since the log is unreadable at those speeds anyway.
+**OKLCH palette.** Colors are defined once as `[L, C, H]` coordinates in OKLCH space and derived into both CSS strings and sRGB `[r, g, b, 255]` tuples. OKLCH gives perceptually uniform lightness, so semantic colors maintain consistent visual weight across node fills, ring arcs, chart lines, and event log highlights.
 
-Colors are defined once in an OKLCH palette (`types.ts`), with every color specified as `[L, C, H]` coordinates and derived into both CSS strings and sRGB `[r, g, b, 255]` tuples. OKLCH gives perceptually uniform lightness, so the semantic colors (receiving, decoded, error, origin) maintain consistent visual weight across different contexts: node fills, ring arcs, chart lines, and event log highlights.
+## Testing
+
+```bash
+bun test          # 379 tests
+bun test:watch
+```
+
+## License
+
+MIT OR Apache-2.0
