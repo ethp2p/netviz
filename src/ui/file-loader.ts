@@ -364,6 +364,49 @@ export function initFileLoader(deps: {
     updateAll();
   }
 
+  getEl('load-example').addEventListener('click', async (e) => {
+    e.preventDefault();
+    latestLoadToken += 1;
+    const loadToken = latestLoadToken;
+    resetLoadingUi();
+    fileName.textContent = 'example-trace.bctrace.gz';
+    setLoadProgress('Downloading example trace...', 0);
+
+    try {
+      const resp = await fetch('/example-trace.bctrace.gz');
+      if (!resp.ok || !resp.body) throw new Error(`HTTP ${resp.status}`);
+      const total = Number(resp.headers.get('content-length') || 0);
+      const [progressStream, decompressStream] = resp.body.tee();
+
+      // Track download progress on one branch
+      const progressPromise = trackCompressedProgress(progressStream, total, loadToken);
+
+      // Decompress and read text on the other
+      const text = await readTextStream(
+        decompressStream.pipeThrough(new DecompressionStream('gzip')),
+        loadToken,
+        (line) => {
+          const preview = buildBundledDecoderPreview('ethp2p', JSON.parse(line) as Record<string, unknown>);
+          if (preview) {
+            setLoadProgress('Drawing initial graph...', 0.18);
+            initPreviewVisualization(preview);
+          }
+        },
+      );
+      await progressPromise;
+      if (loadToken !== latestLoadToken) return;
+
+      rawLines = text.split('\n');
+      resolvedDecoder = { kind: 'bundled', name: 'ethp2p' };
+      setLoadProgress('Decoding...', 0.5);
+      runDecode(rawLines, resolvedDecoder);
+    } catch (err) {
+      console.error('Failed to load example:', err);
+      hideLoadProgress();
+      alert('Failed to load example trace: ' + (err as Error).message);
+    }
+  });
+
   fileInput.addEventListener('change', async (e) => {
     const file = (e.target as HTMLInputElement).files?.[0];
     if (!file) return;

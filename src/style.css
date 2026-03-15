@@ -190,6 +190,8 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 #empty-state { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: var(--text2); font-family: var(--font); z-index: 10; pointer-events: none; }
 #empty-state h1 { font-size: 24px; font-weight: 400; margin-bottom: 8px; color: var(--text); letter-spacing: 0.06em; }
 #empty-state p { font-size: 14px; font-weight: 400; }
+#load-example { pointer-events: auto; display: inline-block; margin-top: 12px; font-size: 13px; color: var(--accent); text-decoration: none; cursor: pointer; font-family: var(--font); }
+#load-example:hover { text-decoration: underline; }
 
 /* Node tooltip */
 #tooltip { position: absolute; pointer-events: none; background: rgba(12,10,9,0.95); border: 1px solid var(--border); border-radius: 0; padding: 6px 10px; font-size: 11px; font-family: var(--font); color: var(--text); display: none; z-index: 100; white-space: nowrap; line-height: 1.5; min-width: 140px; }
