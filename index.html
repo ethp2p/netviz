@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>bctrace visualizer</title>
+<title>netviz</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Ubuntu+Sans+Mono:wght@400..700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/src/style.css">
@@ -12,10 +12,21 @@
 <div id="app">
   <!-- Toolbar -->
   <div id="toolbar">
-    <label id="file-label" for="file-input">Load .bctrace</label>
-    <input type="file" id="file-input" accept=".bctrace,.gz">
+    <label id="file-label" for="file-input">Load trace</label>
+    <input type="file" id="file-input">
     <span id="file-name"></span>
     <select id="msg-select" disabled style="display:none"></select>
+    <div id="decoder-picker" style="display:none">
+      <button id="decoder-btn" class="tb-btn" title="Switch decoder"></button>
+      <div id="decoder-dropdown" class="dd-dropdown">
+        <div id="dd-bundled"></div>
+        <div id="dd-user"></div>
+        <div class="dd-divider"></div>
+        <label id="dd-load-label" class="dd-action" for="dd-load-input">Load decoder (.js)</label>
+        <input type="file" id="dd-load-input" accept=".js" style="display:none">
+        <div id="dd-error"></div>
+      </div>
+    </div>
     <div class="tb-sep"></div>
     <button class="tb-btn" id="btn-play" disabled>Play</button>
     <button class="tb-btn" id="btn-reset" disabled title="Reset to start">Reset</button>
@@ -50,8 +61,8 @@
       <canvas id="deck-canvas"></canvas>
       <canvas id="ring-canvas"></canvas>
       <div id="empty-state">
-        <h1>bctrace visualizer</h1>
-        <p>Load a .bctrace or .bctrace.gz file to begin</p>
+        <h1>netviz</h1>
+        <p>Load a trace file to begin</p>
       </div>
       <div id="load-progress" aria-live="polite">
         <div id="lp-title">Loading trace</div>

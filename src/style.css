@@ -199,3 +199,23 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 ::-webkit-scrollbar-track { background: var(--bg); }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 0; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text3); }
+
+/* Decoder picker */
+#decoder-picker { position: relative; }
+#decoder-btn { font-size: 12px; }
+#decoder-btn .dd-badge { font-size: 9px; opacity: 0.5; margin-left: 4px; }
+#decoder-btn .dd-custom-badge { font-size: 9px; color: var(--accent); margin-left: 4px; }
+.dd-dropdown { display: none; position: absolute; top: 100%; left: 0; margin-top: 4px; min-width: 200px; background: var(--panel); border: 1px solid var(--border); z-index: 50; flex-direction: column; }
+.dd-dropdown.open { display: flex; }
+.dd-item { display: flex; align-items: center; justify-content: space-between; padding: 6px 12px; font-family: var(--font); font-size: 12px; color: var(--text2); cursor: pointer; transition: background 0.1s, color 0.1s; }
+.dd-item:hover { background: var(--border-subtle); color: var(--text); }
+.dd-item.active { color: var(--text); font-weight: 600; }
+.dd-item .dd-remove { background: none; border: none; color: var(--text3); font-family: var(--font); font-size: 14px; cursor: pointer; padding: 0 2px; line-height: 1; transition: color 0.1s; }
+.dd-item .dd-remove:hover { color: var(--red); }
+.dd-divider { height: 1px; background: var(--border); margin: 2px 0; }
+.dd-section-label { font-family: var(--font); font-size: 9px; font-weight: 400; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text3); padding: 6px 12px 2px; }
+.dd-action { display: block; padding: 6px 12px; font-family: var(--font); font-size: 12px; color: var(--accent); cursor: pointer; transition: background 0.1s; }
+.dd-action:hover { background: var(--border-subtle); }
+#dd-error { padding: 6px 12px; font-family: var(--font); font-size: 11px; color: var(--red); display: none; }
+#dd-error.visible { display: block; }
+#decoder-picker.prompt #decoder-btn { border-color: var(--red); color: var(--red); }
