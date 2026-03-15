@@ -92,9 +92,41 @@ interface DecodeErrorMessage {
   message: string;
 }
 
-self.addEventListener('message', (e: MessageEvent<DecodeRequest>) => {
+interface ValidateRequest {
+  kind: 'validate-decoder';
+  source: string;
+}
+
+interface DecoderValidatedMessage {
+  kind: 'decoder-validated';
+  name: string;
+  version: string;
+}
+
+type WorkerRequest = (DecodeRequest & { kind?: 'decode' }) | ValidateRequest;
+
+self.addEventListener('message', (e: MessageEvent<WorkerRequest>) => {
+  const req = e.data;
+
+  if (req.kind === 'validate-decoder') {
+    try {
+      const decoder = loadDecoderFromSource(req.source);
+      (self as unknown as Worker).postMessage({
+        kind: 'decoder-validated',
+        name: decoder.name,
+        version: decoder.version,
+      } satisfies DecoderValidatedMessage);
+    } catch (err) {
+      (self as unknown as Worker).postMessage({
+        kind: 'error',
+        message: err instanceof Error ? err.message : String(err),
+      } satisfies DecodeErrorMessage);
+    }
+    return;
+  }
+
   try {
-    const output = decodeRequest(e.data);
+    const output = decodeRequest(req);
     const transferables: Transferable[] = [output.events.buf.buffer];
     (self as unknown as Worker).postMessage({
       kind: 'result',
