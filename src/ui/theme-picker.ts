@@ -2,7 +2,7 @@ import { getEl } from './dom';
 import type { Theme } from '../theme';
 import {
   THEMES, DEFAULT_THEME,
-  applyThemeCssVars,
+  applyThemeCssVars, updateChromePalette,
   loadSavedThemeName, saveThemeName,
   findThemeByName,
 } from '../theme';
@@ -30,6 +30,7 @@ export function initThemePicker(): ThemePicker {
     picker.current = theme;
     btnEl.textContent = theme.name;
     applyThemeCssVars(theme);
+    updateChromePalette(theme);
     saveThemeName(theme.name);
     closeDropdown();
     picker.onChange?.();

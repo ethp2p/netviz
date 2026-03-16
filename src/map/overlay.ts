@@ -1,9 +1,9 @@
 import type { NodeData, LayoutMode } from '../types';
 import type { RGBA } from '../decoder-sdk';
 import { P } from '../types';
+import { chrome } from '../theme';
 import { getDeck } from './renderer';
 import { getHopRegions } from './layout';
-const RING_EMPTY = P.borderSubtle.css;
 
 export interface HoverHighlight {
   nodeIdx: number;
@@ -87,7 +87,7 @@ export function drawOverlay(
           const a1 = a0 + segAngle;
           ctx.beginPath();
           ctx.arc(sx, sy, r, a0, a1);
-          ctx.strokeStyle = s < current ? fillColor : RING_EMPTY;
+          ctx.strokeStyle = s < current ? fillColor : chrome.borderSubtle.css;
           ctx.stroke();
         }
       }
@@ -121,7 +121,7 @@ export function drawOverlay(
     for (const r of regions) {
       const [px, pyTop] = vp.project([r.xCenter, yLo]);
       if (px < -100 || px > cssW + 100) continue;
-      ctx.fillStyle = P.text2.css;
+      ctx.fillStyle = chrome.text2.css;
       ctx.fillText(
         r.hop === 0 ? 'origin' : r.hop + (r.hop === 1 ? ' hop' : ' hops'),
         px,
@@ -145,7 +145,7 @@ export function drawOverlay(
       if (c) {
         ctx.fillStyle = `rgb(${c[0]},${c[1]},${c[2]})`;
       } else {
-        ctx.fillStyle = P.text2.css;
+        ctx.fillStyle = chrome.text2.css;
       }
       ctx.fillText(nodeNames[i], originX - 6, sy);
     }
@@ -178,7 +178,7 @@ export function drawOverlay(
     // Node outline (brighter, on top)
     ctx.beginPath();
     ctx.arc(nx, ny, hlR, 0, 2 * Math.PI);
-    ctx.strokeStyle = P.text.css;
+    ctx.strokeStyle = chrome.text.css;
     ctx.lineWidth = 2;
     ctx.stroke();
   }

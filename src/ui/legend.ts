@@ -1,5 +1,6 @@
 import type { DecoderOutput } from '../decoder-sdk';
 import { P } from '../types';
+import { chrome } from '../theme';
 import { getEl } from './dom';
 import { formatDefinitionName, toCss } from '../format';
 import { getOverlayMetricGroups } from './overlay-groups';
@@ -53,7 +54,7 @@ export function rebuildLegend(output: DecoderOutput, originNode: number): void {
   for (const group of ringGroups) {
     const ring = document.createElement('span');
     ring.className = 'nl-ring';
-    ring.style.borderColor = group.color ? (toCss(group.color) ?? '') : P.text2.css;
+    ring.style.borderColor = group.color ? (toCss(group.color) ?? '') : chrome.text2.css;
     appendLegendItem(rings, ring, group.label);
   }
 }

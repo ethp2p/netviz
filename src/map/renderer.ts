@@ -3,13 +3,16 @@ import type { OrthographicViewState } from '@deck.gl/core';
 import { ScatterplotLayer, LineLayer } from '@deck.gl/layers';
 import type { NodeData, ActiveArc, LayoutMode } from '../types';
 import { P, PULSE_RING_DURATION_US } from '../types';
+import { chrome } from '../theme';
 import type { CanonicalHeader, ArcLayerDef, RGBA, StateDef, MetricDef } from '../decoder-sdk';
 import type { NodeMetadata } from '../graph/node-metadata';
 import { renderNodeTooltip } from './tooltip';
 import type { NodeLayerDatum } from './tooltip';
 import { buildRaceLayers } from './race-layers';
 
-const EDGE_COLOR: [number, number, number, number] = [...P.border.rgba.slice(0, 3), 200] as [number, number, number, number];
+function edgeColor(): [number, number, number, number] {
+  return [...chrome.border.rgba.slice(0, 3), 200] as [number, number, number, number];
+}
 const SELECTION_COLOR: [number, number, number, number] = [255, 255, 255, 255];
 
 // deck.gl generic typing is strict; use Deck<OrthographicView> to match the view we pass.
@@ -197,7 +200,7 @@ export function buildLayers(
       data: edgeData,
       getSourcePosition: (d: { source: [number, number] }) => d.source,
       getTargetPosition: (d: { target: [number, number] }) => d.target,
-      getColor: EDGE_COLOR,
+      getColor: edgeColor(),
       getWidth: 1,
       widthUnits: 'pixels',
     }));

@@ -21,7 +21,7 @@ import type { RGBA } from './decoder-sdk';
 import { advanceStateTo, restoreCheckpoint, resetIncrementalState } from './state';
 import { P } from './types';
 import { initThemePicker } from './ui/theme-picker';
-import { getBgLuminance, adaptColorForTheme } from './theme';
+import { getThemeAdaptation, adaptColorForTheme } from './theme';
 import { rebuildLegend } from './ui/legend';
 
 const mapContainer = getEl('map-container');
@@ -196,7 +196,7 @@ function adaptAndRender() {
   const orig = store.originalColors;
   const adapt = settings.exactColors
     ? (c: RGBA) => c
-    : (c: RGBA) => adaptColorForTheme(c, getBgLuminance(themePicker.current));
+    : (c: RGBA) => adaptColorForTheme(c, getThemeAdaptation(themePicker.current));
 
   // Adapt state colors
   store.nodeColors = orig.stateColors.map(adapt);

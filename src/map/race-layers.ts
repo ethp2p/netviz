@@ -1,6 +1,7 @@
 import { ScatterplotLayer, LineLayer } from '@deck.gl/layers';
 import type { NodeData } from '../types';
 import { P } from '../types';
+import { chrome } from '../theme';
 import type { RGBA } from '../decoder-sdk';
 
 export function buildRaceLayers(
@@ -27,7 +28,7 @@ export function buildRaceLayers(
       target: [x, totalH + rowH],
       color: k === maxChunks
         ? [...P.idle.rgba.slice(0, 3), 120] as [number, number, number, number]
-        : [...P.border.rgba.slice(0, 3), 80] as [number, number, number, number],
+        : [...chrome.border.rgba.slice(0, 3), 80] as [number, number, number, number],
     });
   }
   layers.push(new LineLayer({

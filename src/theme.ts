@@ -184,6 +184,54 @@ export function applyThemeCssVars(theme: Theme): void {
 }
 
 // ---------------------------------------------------------------------------
+// Active chrome palette (updated on theme change for rendering code)
+// ---------------------------------------------------------------------------
+
+interface ChromeColor {
+  css: string;
+  rgba: RGBA;
+}
+
+function hexToColor(hex: string): ChromeColor {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const parsed = (parse as any)(hex);
+  if (!parsed) return { css: hex, rgba: [0, 0, 0, 255] };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rgb = toRgb(parsed) as { r: number; g: number; b: number } | undefined;
+  if (!rgb) return { css: hex, rgba: [0, 0, 0, 255] };
+  const clamp = (v: number) => Math.max(0, Math.min(1, v));
+  return {
+    css: hex,
+    rgba: [
+      Math.round(clamp(rgb.r) * 255),
+      Math.round(clamp(rgb.g) * 255),
+      Math.round(clamp(rgb.b) * 255),
+      255,
+    ],
+  };
+}
+
+export const chrome = {
+  bg: hexToColor(stone.bg),
+  panel: hexToColor(stone.panel),
+  border: hexToColor(stone.border),
+  borderSubtle: hexToColor(stone.borderSubtle),
+  text: hexToColor(stone.text),
+  text2: hexToColor(stone.text2),
+  text3: hexToColor(stone.text3),
+};
+
+export function updateChromePalette(theme: Theme): void {
+  chrome.bg = hexToColor(theme.bg);
+  chrome.panel = hexToColor(theme.panel);
+  chrome.border = hexToColor(theme.border);
+  chrome.borderSubtle = hexToColor(theme.borderSubtle);
+  chrome.text = hexToColor(theme.text);
+  chrome.text2 = hexToColor(theme.text2);
+  chrome.text3 = hexToColor(theme.text3);
+}
+
+// ---------------------------------------------------------------------------
 // Decoder color adaptation
 // ---------------------------------------------------------------------------
 
@@ -218,24 +266,79 @@ function oklchToRgba(color: OklchColor, alpha = 255): RGBA {
   ];
 }
 
-export function getBgLuminance(theme: Theme): number {
+function hexToOklchProps(hex: string): { c: number; h: number } {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const parsed = (parse as any)(theme.bg);
-  if (!parsed) return theme.appearance === 'dark' ? 0.05 : 0.95;
+  const parsed = (parse as any)(hex);
+  if (!parsed) return { c: 0, h: 0 };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const oklch = toOklch(parsed) as { l: number } | undefined;
-  return oklch?.l ?? (theme.appearance === 'dark' ? 0.05 : 0.95);
+  const oklch = toOklch(parsed) as { c: number; h: number } | undefined;
+  return { c: oklch?.c ?? 0, h: oklch?.h ?? 0 };
 }
 
-export function adaptColorForTheme(rgba: RGBA, bgLuminance: number): RGBA {
-  const color = rgbaToOklch(rgba);
-  const distance = Math.abs(color.l - bgLuminance);
-  if (distance >= MIN_LIGHTNESS_DISTANCE) return rgba;
+function themeAccentStats(theme: Theme): { avgChroma: number; avgHue: number } {
+  const accents = [theme.accent, theme.green, theme.red].map(hexToOklchProps);
+  const avgChroma = accents.reduce((sum, a) => sum + a.c, 0) / accents.length;
+  // Circular mean for hue (degrees wrap at 360)
+  const sinSum = accents.reduce((sum, a) => sum + Math.sin(a.h * Math.PI / 180), 0);
+  const cosSum = accents.reduce((sum, a) => sum + Math.cos(a.h * Math.PI / 180), 0);
+  const avgHue = ((Math.atan2(sinSum, cosSum) * 180 / Math.PI) + 360) % 360;
+  return { avgChroma, avgHue };
+}
 
-  if (bgLuminance < 0.5) {
-    color.l = Math.min(1, bgLuminance + MIN_LIGHTNESS_DISTANCE);
+const REFERENCE_STATS = themeAccentStats(stone);
+
+// How strongly to shift hues toward the theme's temperature (0 = none, 1 = full)
+const HUE_BIAS_STRENGTH = 0.15;
+
+export interface ThemeAdaptation {
+  bgLuminance: number;
+  chromaScale: number;
+  hueBias: number; // degrees to shift (circular offset from reference)
+}
+
+export function getThemeAdaptation(theme: Theme): ThemeAdaptation {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const parsed = (parse as any)(theme.bg);
+  let bgLuminance: number;
+  if (parsed) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const oklch = toOklch(parsed) as { l: number } | undefined;
+    bgLuminance = oklch?.l ?? (theme.appearance === 'dark' ? 0.05 : 0.95);
   } else {
-    color.l = Math.max(0, bgLuminance - MIN_LIGHTNESS_DISTANCE);
+    bgLuminance = theme.appearance === 'dark' ? 0.05 : 0.95;
+  }
+
+  const stats = themeAccentStats(theme);
+  const chromaScale = REFERENCE_STATS.avgChroma > 0 ? stats.avgChroma / REFERENCE_STATS.avgChroma : 1;
+
+  // Shortest angular distance from reference hue to theme hue
+  let hueDelta = stats.avgHue - REFERENCE_STATS.avgHue;
+  if (hueDelta > 180) hueDelta -= 360;
+  if (hueDelta < -180) hueDelta += 360;
+  const hueBias = hueDelta * HUE_BIAS_STRENGTH;
+
+  return { bgLuminance, chromaScale, hueBias };
+}
+
+export function adaptColorForTheme(rgba: RGBA, adaptation: ThemeAdaptation): RGBA {
+  const color = rgbaToOklch(rgba);
+
+  // Scale chroma to match theme vibrancy
+  color.c = color.c * adaptation.chromaScale;
+
+  // Shift hue toward theme temperature
+  if (adaptation.hueBias !== 0 && color.c > 0.01) {
+    color.h = ((color.h + adaptation.hueBias) % 360 + 360) % 360;
+  }
+
+  // Adjust lightness for contrast
+  const distance = Math.abs(color.l - adaptation.bgLuminance);
+  if (distance < MIN_LIGHTNESS_DISTANCE) {
+    if (adaptation.bgLuminance < 0.5) {
+      color.l = Math.min(1, adaptation.bgLuminance + MIN_LIGHTNESS_DISTANCE);
+    } else {
+      color.l = Math.max(0, adaptation.bgLuminance - MIN_LIGHTNESS_DISTANCE);
+    }
   }
 
   return oklchToRgba(color, rgba[3]);
