@@ -134,39 +134,29 @@ export function computeLayout3D(header: CanonicalHeader): Position3D[] {
     maxLat > 0 ? baseDist * (0.3 + 0.7 * ((e.latency / 1000) / maxLat)) : baseDist,
   );
 
-  const chargeStrength = -1500;
-  const maxChargeDist = baseDist * 5;
-  const damping = 0.85;
-  const centerStrength = 0.005;
-  const linkStrength = 0.3;
+  const maxVelocity = baseDist * 0.5;
 
   for (let tick = 0; tick < 300; tick++) {
-    const alpha = 1 - tick / 300;
+    const alpha = Math.pow(1 - tick / 300, 2);
+
+    // Reset forces
+    const fx = new Float64Array(n);
+    const fy = new Float64Array(n);
+    const fz = new Float64Array(n);
 
     // Charge repulsion (all pairs, all axes)
     for (let i = 0; i < n; i++) {
-      let fx = 0, fy = 0, fz = 0;
-      for (let j = 0; j < n; j++) {
-        if (i === j) continue;
+      for (let j = i + 1; j < n; j++) {
         const dx = px[i] - px[j];
         const dy = py[i] - py[j];
         const dz = pz[i] - pz[j];
         const dist2 = dx * dx + dy * dy + dz * dz;
-        if (dist2 < 1 || dist2 > maxChargeDist * maxChargeDist) continue;
-        const dist = Math.sqrt(dist2);
-        const force = chargeStrength / dist2;
-        fx += force * dx / dist;
-        fy += force * dy / dist;
-        fz += force * dz / dist;
+        const dist = Math.sqrt(dist2) || 1;
+        // Repulsion: force = baseDist^2 / dist^2, capped
+        const strength = Math.min(baseDist, baseDist * baseDist / dist2) / dist;
+        fx[i] += dx * strength;  fy[i] += dy * strength;  fz[i] += dz * strength;
+        fx[j] -= dx * strength;  fy[j] -= dy * strength;  fz[j] -= dz * strength;
       }
-      // Centering
-      fx -= centerStrength * px[i];
-      fy -= centerStrength * py[i];
-      fz -= centerStrength * pz[i];
-
-      vx[i] = (vx[i] + fx * alpha) * damping;
-      vy[i] = (vy[i] + fy * alpha) * damping;
-      vz[i] = (vz[i] + fz * alpha) * damping;
     }
 
     // Link attraction
@@ -177,17 +167,29 @@ export function computeLayout3D(header: CanonicalHeader): Position3D[] {
       const dy = py[t] - py[s];
       const dz = pz[t] - pz[s];
       const dist = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
-      const target = linkDist[e];
-      const force = (dist - target) / dist * linkStrength * alpha;
-      const fx = dx * force * 0.5;
-      const fy = dy * force * 0.5;
-      const fz = dz * force * 0.5;
-      vx[s] += fx; vy[s] += fy; vz[s] += fz;
-      vx[t] -= fx; vy[t] -= fy; vz[t] -= fz;
+      const displacement = (dist - linkDist[e]) / dist * 0.1;
+      fx[s] += dx * displacement;  fy[s] += dy * displacement;  fz[s] += dz * displacement;
+      fx[t] -= dx * displacement;  fy[t] -= dy * displacement;  fz[t] -= dz * displacement;
     }
 
-    // Apply velocities
+    // Centering
     for (let i = 0; i < n; i++) {
+      fx[i] -= px[i] * 0.01;
+      fy[i] -= py[i] * 0.01;
+      fz[i] -= pz[i] * 0.01;
+    }
+
+    // Apply forces with velocity damping and clamping
+    for (let i = 0; i < n; i++) {
+      vx[i] = (vx[i] + fx[i] * alpha) * 0.4;
+      vy[i] = (vy[i] + fy[i] * alpha) * 0.4;
+      vz[i] = (vz[i] + fz[i] * alpha) * 0.4;
+      // Clamp velocity
+      const speed = Math.sqrt(vx[i] * vx[i] + vy[i] * vy[i] + vz[i] * vz[i]);
+      if (speed > maxVelocity) {
+        const scale = maxVelocity / speed;
+        vx[i] *= scale; vy[i] *= scale; vz[i] *= scale;
+      }
       px[i] += vx[i];
       py[i] += vy[i];
       pz[i] += vz[i];

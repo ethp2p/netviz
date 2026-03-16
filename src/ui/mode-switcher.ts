@@ -38,6 +38,11 @@ export function initModeSwitcher(deps: {
         aspect,
         store.topoGraph ?? undefined,
       );
+      if (mode === 'force3d') {
+        const zs = store.nodePositions.map(p => p[2]);
+        console.log('3D positions z range:', Math.min(...zs), 'to', Math.max(...zs));
+        console.log('sample positions:', store.nodePositions.slice(0, 3));
+      }
       fitViewToNodes(mapContainer, store.nodePositions);
       updateAll();
     }

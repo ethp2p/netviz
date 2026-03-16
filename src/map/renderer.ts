@@ -1,6 +1,8 @@
-import { Deck, OrthographicView, OrbitView } from '@deck.gl/core';
+import { Deck, OrthographicView, OrbitView, COORDINATE_SYSTEM } from '@deck.gl/core';
 import type { OrthographicViewState } from '@deck.gl/core';
-import { ScatterplotLayer, LineLayer, PointCloudLayer } from '@deck.gl/layers';
+import { ScatterplotLayer, LineLayer } from '@deck.gl/layers';
+import { SimpleMeshLayer } from '@deck.gl/mesh-layers';
+import { SphereGeometry } from '@luma.gl/engine';
 import type { NodeData, ActiveArc, LayoutMode, Position3D } from '../types';
 import { P, PULSE_RING_DURATION_US } from '../types';
 import { chrome } from '../theme';
@@ -129,7 +131,9 @@ export function buildLayers(
 ): (ScatterplotLayer | LineLayer)[] {
   const n = header.nodes.length;
   const edges = header.edges;
-  const nodeRadius = Math.max(3, Math.min(8, 200 / Math.sqrt(n)));
+  const nodeRadius = orbiting
+    ? Math.max(1.5, Math.min(4, 100 / Math.sqrt(n)))
+    : Math.max(3, Math.min(8, 200 / Math.sqrt(n)));
 
   // For race mode, compute bar metrics for node positioning
   const maxChunksForRace = mode === 'race'
@@ -242,13 +246,16 @@ export function buildLayers(
 
   if (!isRace && allDots.length > 0) {
     if (orbiting) {
-      layers.push(new PointCloudLayer({
+      layers.push(new ScatterplotLayer({
         id: 'arc-particles',
         data: allDots,
+        coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
         getPosition: (d: { position: Position3D }) => d.position,
-        getColor: (d: { color: [number, number, number, number] }) => d.color,
-        getNormal: [0, 1, 0],
-        pointSize: 3,
+        getRadius: (d: { radius: number }) => d.radius,
+        getFillColor: (d: { color: [number, number, number, number] }) => d.color,
+        radiusUnits: 'common',
+        billboard: true,
+        antialiasing: true,
       }));
     } else {
       layers.push(new ScatterplotLayer({
@@ -309,13 +316,14 @@ export function buildLayers(
   };
 
   if (orbiting) {
-    layers.push(new PointCloudLayer({
+    layers.push(new SimpleMeshLayer({
       id: 'nodes',
       data: nodeData,
+      coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
+      mesh: new SphereGeometry({ radius: 1, nlat: 12, nlong: 12 }),
       getPosition: (d: NodeLayerDatum) => d.position,
       getColor: (d: NodeLayerDatum) => d.color,
-      getNormal: [0, 1, 0],
-      pointSize: 6,
+      sizeScale: nodeRadius,
       pickable: true,
       onClick: nodeClickHandler,
       onHover: nodeHoverHandler,
