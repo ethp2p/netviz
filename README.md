@@ -13,7 +13,7 @@ bun install
 bun dev
 ```
 
-Open the browser and load a trace file. If the file header contains a `decoderName` field matching a bundled or saved decoder, it is used automatically. Otherwise, a decoder picker appears for manual selection.
+Open the browser and load a trace file, or click "Load an example" to fetch a bundled sample trace. If the file header contains a `decoderName` field matching a bundled or saved decoder, it is used automatically. Otherwise, a decoder picker appears for manual selection.
 
 The bundled ethp2p decoder accepts `.bctrace` and `.bctrace.gz` files produced by the ethp2p simulator. To use a custom decoder, click the decoder button in the toolbar and load a `.js` file that exports a `Decoder` object.
 
@@ -33,7 +33,7 @@ The decoder SDK defines the contract between trace formats and the visualization
 
 Six opcodes cover the event vocabulary: `OP_STATE` (node enters a state), `OP_TRANSFER` (data moves between nodes), `OP_PROGRESS` (chunks held vs. needed), `OP_METRIC` (arbitrary numeric), `OP_LINK` (connection up/down), `OP_LOG` (free-text entry). Every protocol-specific event maps to one of these.
 
-Decoding runs in a Web Worker so user-supplied decoders cannot block the UI. User decoder `.js` files are validated in a temporary worker before being saved to IndexedDB. Output is validated at runtime against the schema.
+Decoding runs in a Web Worker so user-supplied decoders cannot block the UI. Trace data is streamed to the worker line-by-line via a TransformStream pipeline (decompress, text decode, line split), so the main thread never holds the full file in memory. User decoder `.js` files are validated in a temporary worker before being saved to IndexedDB. Output is validated at runtime against the schema.
 
 ## Architecture
 
@@ -108,7 +108,7 @@ All charts share synchronized crosshairs and a time marker that tracks the playb
 ## Testing
 
 ```bash
-bun test          # 379 tests
+bun test          # 387 tests
 bun test:watch
 ```
 

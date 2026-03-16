@@ -7,11 +7,20 @@ const SDK_API = Object.freeze({ ...SDK });
 // Expose SDK globally for user decoders that reference it directly.
 (self as unknown as Record<string, unknown>).SDK = SDK_API;
 
-interface DecodeRequest {
-  lines: string[];
+interface DecodeStartRequest {
+  kind: 'decode-start';
   decoderSrc: string | null;
   decoderName?: string;
   options?: DecodeOptions;
+}
+
+interface DecodeLinesRequest {
+  kind: 'decode-lines';
+  lines: string[];
+}
+
+interface DecodeEndRequest {
+  kind: 'decode-end';
 }
 
 interface DecodeProgressMessage {
@@ -24,6 +33,22 @@ interface DecodeProgressMessage {
 interface DecodeResultMessage {
   kind: 'result';
   output: DecoderOutput;
+}
+
+interface DecodeErrorMessage {
+  kind: 'error';
+  message: string;
+}
+
+interface ValidateRequest {
+  kind: 'validate-decoder';
+  source: string;
+}
+
+interface DecoderValidatedMessage {
+  kind: 'decoder-validated';
+  name: string;
+  version: string;
 }
 
 // safe: new Function() is intentional — this worker executes user-supplied decoder scripts
@@ -59,51 +84,37 @@ function resolveDecoder(decoderSrc: string | null, decoderName?: string): Decode
   return decoder;
 }
 
-function decodeRequest(request: DecodeRequest): DecoderOutput {
-  const { lines, decoderSrc, decoderName, options } = request;
-  (self as unknown as Worker).postMessage({
-    kind: 'progress',
-    label: 'Resolving decoder...',
-    percent: 0.58,
-  } satisfies DecodeProgressMessage);
+function postProgress(msg: DecodeProgressMessage): void {
+  (self as unknown as Worker).postMessage(msg);
+}
+
+function runDecode(lines: string[], decoderSrc: string | null, decoderName?: string, options?: DecodeOptions): DecoderOutput {
+  postProgress({ kind: 'progress', label: 'Resolving decoder...', percent: 0.58 });
   const decoder = resolveDecoder(decoderSrc, decoderName);
-  (self as unknown as Worker).postMessage({
-    kind: 'progress',
-    label: 'Scanning messages and decoding events...',
-    indeterminate: true,
-  } satisfies DecodeProgressMessage);
+  postProgress({ kind: 'progress', label: 'Scanning messages and decoding events...', indeterminate: true });
   const rawOutput = decoder.decode(lines, options);
-  (self as unknown as Worker).postMessage({
-    kind: 'progress',
-    label: 'Normalizing decoder output...',
-    percent: 0.86,
-  } satisfies DecodeProgressMessage);
+  postProgress({ kind: 'progress', label: 'Normalizing decoder output...', percent: 0.86 });
   const normalized = SDK.normalizeDecoderOutput(rawOutput);
-  (self as unknown as Worker).postMessage({
-    kind: 'progress',
-    label: 'Validating decoded trace...',
-    percent: 0.92,
-  } satisfies DecodeProgressMessage);
+  postProgress({ kind: 'progress', label: 'Validating decoded trace...', percent: 0.92 });
   return SDK.validateDecoderOutput(normalized);
 }
 
-interface DecodeErrorMessage {
-  kind: 'error';
-  message: string;
+interface ReDecodeRequest {
+  kind: 're-decode';
+  decoderSrc: string | null;
+  decoderName?: string;
+  options?: DecodeOptions;
 }
 
-interface ValidateRequest {
-  kind: 'validate-decoder';
-  source: string;
-}
+// Streaming decode state: accumulates lines across decode-lines messages.
+let pendingLines: string[] = [];
+let pendingDecoderSrc: string | null = null;
+let pendingDecoderName: string | undefined;
+let pendingOptions: DecodeOptions | undefined;
+// Retained after decode for re-decode (message re-selection, decoder switch).
+let retainedLines: string[] = [];
 
-interface DecoderValidatedMessage {
-  kind: 'decoder-validated';
-  name: string;
-  version: string;
-}
-
-type WorkerRequest = (DecodeRequest & { kind?: 'decode' }) | ValidateRequest;
+type WorkerRequest = DecodeStartRequest | DecodeLinesRequest | DecodeEndRequest | ReDecodeRequest | ValidateRequest;
 
 self.addEventListener('message', (e: MessageEvent<WorkerRequest>) => {
   const req = e.data;
@@ -125,17 +136,61 @@ self.addEventListener('message', (e: MessageEvent<WorkerRequest>) => {
     return;
   }
 
-  try {
-    const output = decodeRequest(req);
-    const transferables: Transferable[] = [output.events.buf.buffer];
-    (self as unknown as Worker).postMessage({
-      kind: 'result',
-      output,
-    } satisfies DecodeResultMessage, transferables);
-  } catch (err) {
-    (self as unknown as Worker).postMessage({
-      kind: 'error',
-      message: err instanceof Error ? err.message : String(err),
-    } satisfies DecodeErrorMessage);
+  if (req.kind === 'decode-start') {
+    pendingLines = [];
+    pendingDecoderSrc = req.decoderSrc;
+    pendingDecoderName = req.decoderName;
+    pendingOptions = req.options;
+    return;
+  }
+
+  if (req.kind === 'decode-lines') {
+    for (const line of req.lines) {
+      pendingLines.push(line);
+    }
+    return;
+  }
+
+  if (req.kind === 'decode-end') {
+    retainedLines = pendingLines;
+    const decoderSrc = pendingDecoderSrc;
+    const decoderName = pendingDecoderName;
+    const options = pendingOptions;
+    pendingLines = [];
+    pendingDecoderSrc = null;
+    pendingDecoderName = undefined;
+    pendingOptions = undefined;
+
+    try {
+      const output = runDecode(retainedLines, decoderSrc, decoderName, options);
+      const transferables: Transferable[] = [output.events.buf.buffer];
+      (self as unknown as Worker).postMessage({
+        kind: 'result',
+        output,
+      } satisfies DecodeResultMessage, transferables);
+    } catch (err) {
+      (self as unknown as Worker).postMessage({
+        kind: 'error',
+        message: err instanceof Error ? err.message : String(err),
+      } satisfies DecodeErrorMessage);
+    }
+    return;
+  }
+
+  if (req.kind === 're-decode') {
+    try {
+      const output = runDecode(retainedLines, req.decoderSrc, req.decoderName, req.options);
+      const transferables: Transferable[] = [output.events.buf.buffer];
+      (self as unknown as Worker).postMessage({
+        kind: 'result',
+        output,
+      } satisfies DecodeResultMessage, transferables);
+    } catch (err) {
+      (self as unknown as Worker).postMessage({
+        kind: 'error',
+        message: err instanceof Error ? err.message : String(err),
+      } satisfies DecodeErrorMessage);
+    }
+    return;
   }
 });
