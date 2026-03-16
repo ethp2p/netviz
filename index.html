@@ -60,6 +60,7 @@
   <div id="main">
     <!-- Stats panel -->
     <div id="stats-panel">
+      <button class="mobile-close" id="mobile-stats-close" aria-label="Close">&times;</button>
       <h2>Statistics</h2>
     </div>
 
@@ -75,8 +76,10 @@
       <canvas id="ring-canvas"></canvas>
       <div id="empty-state">
         <h1>netviz</h1>
-        <p>Load a trace file to begin</p>
+        <p class="desktop-only">Load a trace file to begin</p>
+        <p class="mobile-only">Tap below to load an example trace</p>
         <a id="load-example" href="#">Load an example</a>
+        <p class="mobile-only mobile-hint">For full features, use a desktop browser</p>
       </div>
       <div id="load-progress" aria-live="polite">
         <div id="lp-title">Loading trace</div>
@@ -84,6 +87,7 @@
         <div id="lp-bar"><div id="lp-fill"></div></div>
       </div>
       <div id="node-legend">
+        <button class="mobile-close" id="mobile-legend-close" aria-label="Close">&times;</button>
         <div class="nl-titlebar">
           <span class="nl-title">Legend</span>
           <button id="settings-btn" title="Graph settings">
@@ -95,6 +99,14 @@
         <div id="settings-panel"></div>
       </div>
       <div id="tooltip"></div>
+      <!-- Mobile drawer toggles -->
+      <button id="mobile-stats-toggle" class="mobile-drawer-btn mobile-top" aria-label="Toggle stats">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M2 3h12v1.5H2zm0 4h8v1.5H2zm0 4h10v1.5H2z"/></svg>
+      </button>
+      <div id="mobile-backdrop" class="mobile-backdrop"></div>
+      <button id="mobile-legend-toggle" class="mobile-drawer-btn mobile-bottom" aria-label="Toggle legend">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="4" cy="4" r="2"/><circle cx="4" cy="8" r="2"/><circle cx="4" cy="12" r="2"/><rect x="8" y="3" width="6" height="2"/><rect x="8" y="7" width="6" height="2"/><rect x="8" y="11" width="6" height="2"/></svg>
+      </button>
       <!-- Timeline (floating overlay) -->
       <div id="timeline-bar">
         <div id="tl-controls">

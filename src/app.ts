@@ -278,3 +278,32 @@ deckCanvas.addEventListener('click', () => {
   if (!store.decoderOutput || store.selectedNode < 0) return;
   clearSelection();
 });
+
+// Mobile drawer toggles
+const mobileBackdrop = document.getElementById('mobile-backdrop');
+const mobileStatsPanel = getEl('stats-panel');
+const mobileNodeLegend = getEl('node-legend');
+
+function closeMobileDrawers() {
+  mobileStatsPanel.classList.remove('mobile-open');
+  mobileNodeLegend.classList.remove('mobile-open');
+  mobileBackdrop?.classList.remove('visible');
+}
+
+function openMobileDrawer(el: HTMLElement) {
+  closeMobileDrawers();
+  el.classList.add('mobile-open');
+  mobileBackdrop?.classList.add('visible');
+}
+
+document.getElementById('mobile-stats-toggle')?.addEventListener('click', () => {
+  if (mobileStatsPanel.classList.contains('mobile-open')) closeMobileDrawers();
+  else openMobileDrawer(mobileStatsPanel);
+});
+document.getElementById('mobile-legend-toggle')?.addEventListener('click', () => {
+  if (mobileNodeLegend.classList.contains('mobile-open')) closeMobileDrawers();
+  else openMobileDrawer(mobileNodeLegend);
+});
+document.getElementById('mobile-stats-close')?.addEventListener('click', closeMobileDrawers);
+document.getElementById('mobile-legend-close')?.addEventListener('click', closeMobileDrawers);
+mobileBackdrop?.addEventListener('click', closeMobileDrawers);
