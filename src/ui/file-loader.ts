@@ -376,14 +376,36 @@ export function initFileLoader(deps: {
       const resp = await fetch('/example-trace.bctrace.gz');
       if (!resp.ok || !resp.body) throw new Error(`HTTP ${resp.status}`);
       const total = Number(resp.headers.get('content-length') || 0);
-      const [progressStream, decompressStream] = resp.body.tee();
 
-      // Track download progress on one branch
-      const progressPromise = trackCompressedProgress(progressStream, total, loadToken);
+      // Peek at the first bytes to detect if the browser already decompressed
+      // the response (Vite dev server sends Content-Encoding: gzip for .gz files,
+      // causing transparent decompression before JS sees the body).
+      const reader = resp.body.getReader();
+      const { value: firstChunk } = await reader.read();
+      if (!firstChunk) throw new Error('Empty response');
+      const isGzip = firstChunk[0] === 0x1f && firstChunk[1] === 0x8b;
 
-      // Decompress and read text on the other
+      // Reconstruct the full stream with the peeked chunk prepended
+      const fullStream = new ReadableStream<Uint8Array>({
+        start(controller) { controller.enqueue(firstChunk); },
+        async pull(controller) {
+          const { done, value } = await reader.read();
+          if (done) controller.close();
+          else controller.enqueue(value);
+        },
+      });
+
+      let textStream: ReadableStream;
+      if (isGzip) {
+        const [progressStream, decompressStream] = fullStream.tee();
+        trackCompressedProgress(progressStream, total, loadToken);
+        textStream = decompressStream.pipeThrough(new DecompressionStream('gzip') as TransformStream<Uint8Array, Uint8Array>);
+      } else {
+        textStream = fullStream;
+      }
+
       const text = await readTextStream(
-        decompressStream.pipeThrough(new DecompressionStream('gzip')),
+        textStream,
         loadToken,
         (line) => {
           const preview = buildBundledDecoderPreview('ethp2p', JSON.parse(line) as Record<string, unknown>);
@@ -392,8 +414,8 @@ export function initFileLoader(deps: {
             initPreviewVisualization(preview);
           }
         },
+        isGzip ? undefined : total,
       );
-      await progressPromise;
       if (loadToken !== latestLoadToken) return;
 
       rawLines = text.split('\n');
