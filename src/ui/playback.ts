@@ -117,7 +117,15 @@ export function initPlayback(deps: {
   speedInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { applySpeedInput(); speedInput.blur(); }
   });
-  speedInput.addEventListener('focus', () => speedInput.select());
+  speedInput.addEventListener('focus', () => {
+    speedInput.dataset.prev = speedInput.value;
+    speedInput.value = '';
+  });
+  speedInput.addEventListener('blur', () => {
+    if (speedInput.value === '') {
+      speedInput.value = speedInput.dataset.prev ?? formatSpeed(store.speed);
+    }
+  });
   timeline.addEventListener('input', () => { store.currentTime = parseInt(timeline.value, 10); updateAll(); });
 
   return { togglePlay };
