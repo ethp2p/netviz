@@ -66,7 +66,7 @@ export interface CustomSeries {
 export interface Milestone {
   time: number;
   label: string;
-  color: string; // CSS color string
+  color: RGBA;
 }
 
 export interface PackedEvents {
@@ -87,7 +87,7 @@ export interface MessageInfo {
 export interface EventTypeDef {
   code: string;
   name: string;
-  color?: string;
+  color?: RGBA;
 }
 
 export interface DecoderOutput {

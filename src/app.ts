@@ -17,13 +17,17 @@ import { getOverlayMetricGroups } from './ui/overlay-groups';
 import { getDeck, buildLayers, fitViewToNodes } from './map/renderer';
 import { drawOverlay } from './map/overlay';
 import { upperBound } from './trace';
+import type { RGBA } from './decoder-sdk';
 import { advanceStateTo, restoreCheckpoint, resetIncrementalState } from './state';
 import { P } from './types';
+import { initThemePicker } from './ui/theme-picker';
+import { getBgLuminance, adaptColorForTheme } from './theme';
+import { rebuildLegend } from './ui/legend';
 
 const mapContainer = getEl('map-container');
-const timeDisplay = getEl('time-display');
+const tlCurrent = getEl('tl-current');
+const tlTotal = getEl('tl-total');
 const timeline = getEl<HTMLInputElement>('timeline');
-const tlTime = getEl('tl-time');
 const tooltipEl = getEl('tooltip');
 const clearFilterBtn = getEl('clear-filter');
 const ringCanvas = getEl<HTMLCanvasElement>('ring-canvas');
@@ -148,9 +152,10 @@ function updateAll() {
     store.timeOffset,
   );
 
-  timeDisplay.textContent = 't = ' + formatTime(store.currentTime - store.timeOffset);
+  tlCurrent.textContent = formatTime(store.currentTime - store.timeOffset);
   timeline.value = String(store.currentTime);
-  tlTime.textContent = 't = ' + formatTime(store.currentTime - store.timeOffset);
+  const maxTime = Number(timeline.max);
+  tlTotal.textContent = formatTime(maxTime - store.timeOffset);
 
   if (store.chartControls) store.chartControls.updateTime(store.currentTime);
 }
@@ -173,10 +178,69 @@ function clearSelection() {
   renderLayers();
 }
 
+function adaptAndRender() {
+  const output = store.decoderOutput;
+  if (!output) return;
+
+  // Save original colors on first call
+  if (!store.originalColors) {
+    store.originalColors = {
+      stateColors: output.states.map(s => [...s.color] as RGBA),
+      arcLayerColors: output.arcLayers.map(a => [...a.color] as RGBA),
+      metricColors: output.metrics.map(m => m.color ? [...m.color] as RGBA : undefined),
+      milestoneColors: output.milestones.map(m => [...m.color] as RGBA),
+      eventTypeColors: (output.eventTypes ?? []).map(e => e.color ? [...e.color] as RGBA : undefined),
+    };
+  }
+
+  const orig = store.originalColors;
+  const adapt = settings.exactColors
+    ? (c: RGBA) => c
+    : (c: RGBA) => adaptColorForTheme(c, getBgLuminance(themePicker.current));
+
+  // Adapt state colors
+  store.nodeColors = orig.stateColors.map(adapt);
+  output.states.forEach((s, i) => { s.color = store.nodeColors[i]; });
+
+  // Adapt arc layer colors
+  orig.arcLayerColors.forEach((c, i) => { output.arcLayers[i].color = adapt(c); });
+
+  // Adapt metric colors
+  orig.metricColors.forEach((c, i) => {
+    if (c) output.metrics[i].color = adapt(c);
+  });
+
+  // Adapt milestone colors
+  orig.milestoneColors.forEach((c, i) => { output.milestones[i].color = adapt(c); });
+
+  // Adapt event type colors
+  if (output.eventTypes) {
+    orig.eventTypeColors.forEach((c, i) => {
+      if (c && output.eventTypes![i]) output.eventTypes![i].color = adapt(c);
+    });
+  }
+
+  rebuildLegend(output, store.originNode);
+  renderMilestones(
+    output.milestones,
+    Number(timeline.min),
+    Number(timeline.max),
+    store.timeOffset,
+    (time) => { store.currentTime = time; updateAll(); },
+  );
+  eventsPanel.rebuildFilter();
+  settings.rebuild(output);
+  renderLayers();
+  drawOverlayNow();
+}
+
 // Init UI modules (one-time listener setup; content rebuilt on each decode)
 const playback = initPlayback({ store, eventLogState, updateAll });
 const eventsPanel = initEventsPanel({ store, eventLogState, drawOverlayNow, renderLayers });
-const settings = initSettings({ store, drawOverlayNow, renderLayers });
+const settings = initSettings({
+  store, drawOverlayNow, renderLayers,
+  onExactColorsChange: () => adaptAndRender(),
+});
 const picker = await initDecoderPicker();
 initFileLoader({
   store,
@@ -190,7 +254,7 @@ initFileLoader({
   drawOverlayNow,
   rebuildSettings: (output) => settings.rebuild(output),
   onStatEls: (els) => { statEls = els; },
-  onLoad: () => { eventsPanel.rebuildFilter(); },
+  onLoad: () => adaptAndRender(),
 });
 initKeyboard({
   store,
@@ -200,6 +264,9 @@ initKeyboard({
   clearSelection,
 });
 initModeSwitcher({ store, updateAll });
+
+const themePicker = initThemePicker();
+themePicker.onChange = () => adaptAndRender();
 
 // Background click on map clears node filter
 const deckCanvas = getEl('deck-canvas');

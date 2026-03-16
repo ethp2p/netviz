@@ -15,9 +15,29 @@ export function initPlayback(deps: {
   const { store, eventLogState, updateAll } = deps;
   const btnPlay = getEl<HTMLButtonElement>('btn-play');
   const btnReset = getEl<HTMLButtonElement>('btn-reset');
-  const speedSelect = getEl<HTMLSelectElement>('speed-select');
+  const speedInput = getEl<HTMLInputElement>('speed-input');
   const timeline = getEl<HTMLInputElement>('timeline');
+  const iconPlay = getEl('icon-play');
+  const iconPause = getEl('icon-pause');
   let lastFrameTs = 0;
+
+  function updatePlayIcon() {
+    iconPlay.style.display = store.playing ? 'none' : '';
+    iconPause.style.display = store.playing ? '' : 'none';
+  }
+
+  function formatSpeed(value: number): string {
+    if (value >= 100) return Math.round(value) + 'x';
+    if (value >= 10) return value.toFixed(1) + 'x';
+    if (value >= 1) return value.toFixed(1) + 'x';
+    return value.toFixed(2) + 'x';
+  }
+
+  function setSpeed(speed: number) {
+    speed = Math.max(0.01, speed);
+    store.speed = speed;
+    speedInput.value = formatSpeed(speed);
+  }
 
   function togglePlay() {
     if (!store.decoderOutput || !store.incState) return;
@@ -33,7 +53,7 @@ export function initPlayback(deps: {
       eventLogState.list.replaceChildren();
     }
     store.playing = !store.playing;
-    btnPlay.textContent = store.playing ? 'Pause' : 'Play';
+    updatePlayIcon();
     btnPlay.classList.toggle('active', store.playing);
     if (store.playing) {
       lastFrameTs = performance.now();
@@ -44,7 +64,7 @@ export function initPlayback(deps: {
   function resetPlayback() {
     if (!store.decoderOutput || !store.incState) return;
     store.playing = false;
-    btnPlay.textContent = 'Play';
+    updatePlayIcon();
     btnPlay.classList.remove('active');
     store.currentTime = parseInt(timeline.min, 10);
     const nodeCount = store.decoderOutput.header.nodes.length;
@@ -68,7 +88,7 @@ export function initPlayback(deps: {
     if (store.currentTime >= maxTime) {
       store.currentTime = maxTime;
       store.playing = false;
-      btnPlay.textContent = 'Play';
+      updatePlayIcon();
       btnPlay.classList.remove('active');
     }
 
@@ -81,7 +101,23 @@ export function initPlayback(deps: {
 
   btnPlay.addEventListener('click', togglePlay);
   btnReset.addEventListener('click', resetPlayback);
-  speedSelect.addEventListener('change', () => { store.speed = parseFloat(speedSelect.value); });
+  function applySpeedInput() {
+    const parsed = parseFloat(speedInput.value.replace('x', ''));
+    if (!isNaN(parsed) && parsed > 0) {
+      setSpeed(parsed);
+    } else {
+      speedInput.value = formatSpeed(store.speed);
+    }
+  }
+  speedInput.addEventListener('change', applySpeedInput);
+  speedInput.addEventListener('input', () => {
+    // Datalist selection fires input with a complete value
+    if (speedInput.value.endsWith('x')) applySpeedInput();
+  });
+  speedInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { applySpeedInput(); speedInput.blur(); }
+  });
+  speedInput.addEventListener('focus', () => speedInput.select());
   timeline.addEventListener('input', () => { store.currentTime = parseInt(timeline.value, 10); updateAll(); });
 
   return { togglePlay };

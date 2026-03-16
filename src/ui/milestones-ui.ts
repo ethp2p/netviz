@@ -1,5 +1,5 @@
 import type { Milestone } from '../decoder-sdk';
-import { escapeHtml, formatTime } from '../format';
+import { formatTime, toCss } from '../format';
 import { getEl } from './dom';
 
 export function renderMilestones(
@@ -10,18 +10,24 @@ export function renderMilestones(
   onSeek: (time: number) => void,
 ): void {
   const tlMarkers = getEl('tl-markers');
-  const tlLegend = getEl('tl-legend');
+  const statsPanel = getEl('stats-panel');
 
   tlMarkers.replaceChildren();
-  tlLegend.replaceChildren();
+
+  // Remove previous milestones section from stats panel
+  const prev = statsPanel.querySelector('#milestones-section');
+  if (prev) prev.remove();
 
   const range = maxTime - minTime;
   if (range <= 0 || milestones.length === 0) return;
 
-  const title = document.createElement('div');
-  title.id = 'tl-legend-title';
+  // Milestones section in the stats panel
+  const section = document.createElement('div');
+  section.id = 'milestones-section';
+
+  const title = document.createElement('h3');
   title.textContent = 'Milestones';
-  tlLegend.appendChild(title);
+  section.appendChild(title);
 
   for (const ms of milestones) {
     const pct = ((ms.time - minTime) / range) * 100;
@@ -30,27 +36,27 @@ export function renderMilestones(
     const marker = document.createElement('div');
     marker.className = 'tl-marker';
     marker.style.left = pct + '%';
-    marker.style.backgroundColor = ms.color;
+    marker.style.backgroundColor = toCss(ms.color) ?? '';
     marker.title = ms.label + ' @ ' + formatTime(ms.time - timeOffset);
     marker.addEventListener('click', () => {
       onSeek(ms.time);
     });
     tlMarkers.appendChild(marker);
 
-    // Legend entry
-    const item = document.createElement('span');
-    item.className = 'tl-legend-item';
+    // Legend entry in stats panel
+    const item = document.createElement('div');
+    item.className = 'ms-item';
 
     const dot = document.createElement('span');
-    dot.className = 'tl-legend-dot';
-    dot.style.background = ms.color;
+    dot.className = 'ms-dot';
+    dot.style.background = toCss(ms.color) ?? '';
 
     const labelSpan = document.createElement('span');
-    labelSpan.className = 'tl-legend-label';
+    labelSpan.className = 'ms-label';
     labelSpan.textContent = ms.label;
 
     const timeSpan = document.createElement('span');
-    timeSpan.className = 'tl-legend-time';
+    timeSpan.className = 'ms-time';
     timeSpan.textContent = formatTime(ms.time - timeOffset);
 
     item.appendChild(dot);
@@ -59,6 +65,13 @@ export function renderMilestones(
     item.addEventListener('click', () => {
       onSeek(ms.time);
     });
-    tlLegend.appendChild(item);
+    section.appendChild(item);
+  }
+
+  const chartsSection = statsPanel.querySelector('#charts-section');
+  if (chartsSection) {
+    statsPanel.insertBefore(section, chartsSection);
+  } else {
+    statsPanel.appendChild(section);
   }
 }

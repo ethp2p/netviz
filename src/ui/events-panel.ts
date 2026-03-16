@@ -1,22 +1,23 @@
-import type { StateDef, ArcLayerDef, MetricDef, EventFilter, EventTypeDef } from '../decoder-sdk';
+import type { StateDef, ArcLayerDef, MetricDef, EventFilter, EventTypeDef, RGBA } from '../decoder-sdk';
 import {
   EVENT_STRIDE, OP_STATE, OP_TRANSFER, OP_PROGRESS, OP_METRIC, OP_LINK, OP_LOG,
+  oklch, hex,
 } from '../decoder-sdk';
 import type { EventIndex } from '../trace';
 import { countBefore, upperBound } from '../trace';
-import { formatTime } from '../format';
+import { formatTime, toCss } from '../format';
 import { getEl } from './dom';
 import type { AppStore } from '../store';
 
 const OPCODE_LABELS = ['S', 'T', 'P', 'M', 'L', 'G'];
 const OPCODE_NAMES = ['State', 'Transfer', 'Progress', 'Metric', 'Link', 'Log'];
-const OPCODE_COLORS = [
-  'var(--green)',     // State
-  'var(--receiving)', // Transfer
-  'var(--routing)',   // Progress
-  'var(--useless)',   // Metric
-  'var(--slate)',     // Link
-  'var(--text2)',     // Log
+const OPCODE_COLORS: RGBA[] = [
+  oklch(0.75, 0.14, 155), // State (decoded green)
+  oklch(0.72, 0.12, 230), // Transfer (receiving)
+  oklch(0.65, 0.10, 280), // Progress (routing)
+  oklch(0.72, 0.14, 60),  // Metric (useless)
+  oklch(0.55, 0.03, 250), // Link (slate)
+  hex('#a8a29e'),          // Log (text2)
 ];
 const NUM_OPCODES = 6;
 
@@ -171,7 +172,7 @@ function appendEventSpans(
   ts: string,
   node: string,
   typeCode: string,
-  typeClass: string,
+  typeColor: RGBA | undefined,
   detail: string,
 ): void {
   const tsEl = document.createElement('span');
@@ -183,8 +184,10 @@ function appendEventSpans(
   nodeEl.textContent = node;
 
   const typeEl = document.createElement('span');
-  typeEl.className = 'ev-type ' + typeClass;
+  typeEl.className = 'ev-type';
   typeEl.textContent = typeCode;
+  const colorStr = toCss(typeColor);
+  if (colorStr) typeEl.style.color = colorStr;
 
   const detailEl = document.createElement('span');
   detailEl.className = 'ev-detail';
@@ -225,7 +228,7 @@ function createEventEntry(
     if (peerNodeIdx >= 0) div.dataset.peer = String(peerNodeIdx);
     const detail = op === OP_LOG ? (logTexts[buf[base + 3] | 0] ?? '') : formatEventDetail(buf, base, states, arcLayers, metrics, logTexts);
     const typeCode = eventType?.code ?? String(eventTypeIdx);
-    appendEventSpans(div, formatTime(ts - tOffset), 'n' + nodeIdx, typeCode, 'ev-type-' + typeCode, detail);
+    appendEventSpans(div, formatTime(ts - tOffset), 'n' + nodeIdx, typeCode, eventType?.color, detail);
     return div;
   }
 
@@ -236,7 +239,7 @@ function createEventEntry(
 
   const label = OPCODE_LABELS[op] ?? String(op);
   const detail = formatEventDetail(buf, base, states, arcLayers, metrics, logTexts);
-  appendEventSpans(div, formatTime(ts - tOffset), 'n' + nodeIdx, label, 'ev-type-' + op, detail);
+  appendEventSpans(div, formatTime(ts - tOffset), 'n' + nodeIdx, label, OPCODE_COLORS[op], detail);
 
   return div;
 }
@@ -356,8 +359,8 @@ export function initEventsPanel(deps: {
         tag.dataset.eventType = String(index);
         tag.textContent = eventType.code;
         tag.title = eventType.name;
-        tag.style.color = eventType.color ?? 'var(--text2)';
-        tag.style.borderColor = eventType.color ?? 'var(--border)';
+        tag.style.color = toCss(eventType.color) ?? 'var(--text2)';
+        tag.style.borderColor = toCss(eventType.color) ?? 'var(--border)';
         if (!store.eventFilter.eventTypes.has(index)) tag.classList.add('off');
         tag.addEventListener('click', (e) => {
           if (e.altKey || e.metaKey) {
@@ -394,8 +397,8 @@ export function initEventsPanel(deps: {
       tag.dataset.opcode = String(op);
       tag.textContent = OPCODE_LABELS[op];
       tag.title = OPCODE_NAMES[op];
-      tag.style.color = OPCODE_COLORS[op] ?? 'var(--text2)';
-      tag.style.borderColor = OPCODE_COLORS[op] ?? 'var(--border)';
+      tag.style.color = toCss(OPCODE_COLORS[op]) ?? 'var(--text2)';
+      tag.style.borderColor = toCss(OPCODE_COLORS[op]) ?? 'var(--border)';
 
       if (!store.eventFilter.opcodes.has(op)) tag.classList.add('off');
 

@@ -3,13 +3,16 @@ import type { AppStore } from '../store';
 import { getEl } from './dom';
 import { formatDefinitionName, toCss } from '../format';
 import { getOverlayMetricGroups } from './overlay-groups';
+import { loadExactColors, saveExactColors } from '../theme';
 
 export function initSettings(deps: {
   store: AppStore;
   drawOverlayNow: () => void;
   renderLayers: () => void;
-}): { rebuild: (output: DecoderOutput) => void } {
+  onExactColorsChange?: (exact: boolean) => void;
+}): { rebuild: (output: DecoderOutput) => void; exactColors: boolean } {
   const { store, drawOverlayNow, renderLayers } = deps;
+  let exactColors = loadExactColors();
   const settingsBtn = getEl('settings-btn');
   const settingsPanel = getEl('settings-panel');
   const nodeLegend = getEl('node-legend');
@@ -147,13 +150,31 @@ export function initSettings(deps: {
     content.appendChild(section);
   }
 
+  function buildColorSection(content: HTMLElement): void {
+    const section = document.createElement('div');
+    section.className = 'sp-section';
+    section.appendChild(buildSectionHeader('Colors'));
+    section.appendChild(buildToggle(
+      'Use exact decoder colors',
+      exactColors,
+      null,
+      (checked) => {
+        exactColors = checked;
+        saveExactColors(checked);
+        deps.onExactColorsChange?.(checked);
+      },
+    ));
+    content.appendChild(section);
+  }
+
   function rebuild(output: DecoderOutput): void {
     settingsPanel.replaceChildren();
     const content = document.createElement('div');
     buildRingSection(content, output.metrics);
     buildArcSection(content, output.arcLayers);
+    buildColorSection(content);
     settingsPanel.appendChild(content);
   }
 
-  return { rebuild };
+  return { rebuild, get exactColors() { return exactColors; } };
 }

@@ -34,10 +34,11 @@ export function initFileLoader(deps: {
   const { store, eventLogState, updateAll, drawOverlayNow } = deps;
   const fileInput = getEl<HTMLInputElement>('file-input');
   const fileName = getEl('file-name');
+  const msgPicker = getEl('msg-picker');
   const msgSelect = getEl<HTMLSelectElement>('msg-select');
   const btnPlay = getEl<HTMLButtonElement>('btn-play');
   const btnReset = getEl<HTMLButtonElement>('btn-reset');
-  const speedSelect = getEl<HTMLSelectElement>('speed-select');
+  const speedInput = getEl<HTMLInputElement>('speed-input');
   const timeline = getEl<HTMLInputElement>('timeline');
   const mapContainer = getEl('map-container');
   const emptyState = getEl('empty-state');
@@ -45,7 +46,6 @@ export function initFileLoader(deps: {
   const eventLogList = getEl('event-log-list');
   const clearFilterBtn = getEl('clear-filter');
   const statsPanel = getEl('stats-panel');
-  const timelineLegend = getEl('tl-legend');
   const eventTypeFilter = getEl('event-type-filter');
   const countryDist = getEl('country-dist');
   const bwDist = getEl('bw-dist');
@@ -81,23 +81,22 @@ export function initFileLoader(deps: {
     previewShown = false;
     store.previewingLoad = false;
     store.playing = false;
+    store.originalColors = null;
     store.selectedNode = -1;
     store.hoveredNode = -1;
     store.hoverHighlight = null;
     btnPlay.disabled = true;
-    btnPlay.textContent = 'Play';
     btnPlay.classList.remove('active');
     btnReset.disabled = true;
-    speedSelect.disabled = true;
+    speedInput.disabled = true;
     timeline.disabled = true;
     msgSelect.disabled = true;
-    msgSelect.style.display = 'none';
+    msgPicker.style.display = 'none';
     nodeLegend.classList.remove('visible');
     clearFilterBtn.style.display = 'none';
     eventLogState.lastRenderedIdx = -1;
     eventLogList.replaceChildren();
     eventTypeFilter.replaceChildren();
-    timelineLegend.replaceChildren();
     countryDist.replaceChildren();
     bwDist.replaceChildren();
     const h2 = statsPanel.querySelector('h2');
@@ -175,8 +174,13 @@ export function initFileLoader(deps: {
     setLoadProgress('Finalizing view...', 0.97);
     populateStore(output);
     buildMessageDropdown(output);
-    initVisualization(output);
-    hideLoadProgress();
+    try {
+      initVisualization(output);
+    } catch (err) {
+      console.error('initVisualization failed:', err);
+    } finally {
+      hideLoadProgress();
+    }
   }
 
   function populateStore(output: DecoderOutput) {
@@ -259,7 +263,7 @@ export function initFileLoader(deps: {
       msgSelect.appendChild(opt);
     }
     msgSelect.disabled = false;
-    msgSelect.style.display = messages.length > 1 ? '' : 'none';
+    msgPicker.style.display = messages.length > 1 ? '' : 'none';
   }
 
   function initVisualization(output: DecoderOutput) {
@@ -308,7 +312,7 @@ export function initFileLoader(deps: {
     timeline.disabled = false;
     btnPlay.disabled = false;
     btnReset.disabled = false;
-    speedSelect.disabled = false;
+    speedInput.disabled = false;
 
     const aspect = mapContainer.clientWidth / (mapContainer.clientHeight || 1);
     store.topoGraph = buildTopologyGraph(output.header);
@@ -323,7 +327,6 @@ export function initFileLoader(deps: {
     store.currentTime = tlMin;
     store.playing = false;
     store.selectedNode = -1;
-    btnPlay.textContent = 'Play';
     btnPlay.classList.remove('active');
     eventLogState.lastRenderedIdx = -1;
     eventLogList.replaceChildren();
@@ -332,8 +335,6 @@ export function initFileLoader(deps: {
     store.incState = createIncrementalState(
       nodeCount, output.metrics.length, output.arcLayers.length,
     );
-
-    deps.renderMilestones(milestones, tlMin, tlMax);
 
     const h2 = statsPanel.querySelector('h2');
     statsPanel.replaceChildren();
@@ -352,6 +353,8 @@ export function initFileLoader(deps: {
     deps.onStatEls(statEls);
 
     deps.rebuildSettings(output);
+
+    deps.renderMilestones(milestones, tlMin, tlMax);
 
     const chartRange: [number, number] = [tlMin, tlMax];
     const chartData = computeChartData(

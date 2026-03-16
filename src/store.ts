@@ -8,8 +8,17 @@ import type { NodeMetadata } from './graph/node-metadata';
 import type { ChartControls } from './charts/render';
 import type { HoverHighlight } from './map/overlay';
 
+export interface OriginalDecoderColors {
+  stateColors: RGBA[];
+  arcLayerColors: RGBA[];
+  metricColors: (RGBA | undefined)[];
+  milestoneColors: RGBA[];
+  eventTypeColors: (RGBA | undefined)[];
+}
+
 export interface AppStore {
   decoderOutput: DecoderOutput | null;
+  originalColors: OriginalDecoderColors | null;
   eventBuf: Float64Array | null;
   logTexts: string[];
   eventCount: number;
@@ -42,6 +51,7 @@ export interface AppStore {
 export function createStore(): AppStore {
   return {
     decoderOutput: null,
+    originalColors: null,
     eventBuf: null,
     logTexts: [],
     eventCount: 0,

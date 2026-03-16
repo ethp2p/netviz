@@ -74,19 +74,19 @@ const VERDICT_TO_METRIC: Record<number, number> = {
 };
 
 const EVENT_TYPES: EventTypeDef[] = [
-  { code: 'ph', name: 'peer handshook', color: 'var(--slate)' },
-  { code: 'ps', name: 'peer subscribed', color: 'var(--slate)' },
-  { code: 'pu', name: 'peer unsubscribed', color: 'var(--slate)' },
-  { code: 'pg', name: 'peer gone', color: 'var(--slate)' },
-  { code: 'ss', name: 'session started', color: 'var(--text)' },
-  { code: 'sd', name: 'session decoded', color: 'var(--green)' },
-  { code: 'sx', name: 'session disposed', color: 'var(--text2)' },
-  { code: 'cs', name: 'chunk sent', color: 'var(--useless)' },
-  { code: 'cr', name: 'chunk received', color: 'var(--useless)' },
-  { code: 'ce', name: 'chunk error', color: 'var(--red)' },
-  { code: 'ru', name: 'routing update', color: 'var(--routing)' },
-  { code: 'po', name: 'preamble opened', color: 'var(--slate)' },
-  { code: 'sp', name: 'strategy progress', color: 'var(--routing)' },
+  { code: 'ph', name: 'peer handshook', color: COLORS.session },
+  { code: 'ps', name: 'peer subscribed', color: COLORS.session },
+  { code: 'pu', name: 'peer unsubscribed', color: COLORS.session },
+  { code: 'pg', name: 'peer gone', color: COLORS.session },
+  { code: 'ss', name: 'session started', color: COLORS.receiving },
+  { code: 'sd', name: 'session decoded', color: COLORS.decoded },
+  { code: 'sx', name: 'session disposed', color: COLORS.session },
+  { code: 'cs', name: 'chunk sent', color: COLORS.useless },
+  { code: 'cr', name: 'chunk received', color: COLORS.useless },
+  { code: 'ce', name: 'chunk error', color: COLORS.error },
+  { code: 'ru', name: 'routing update', color: COLORS.routing },
+  { code: 'po', name: 'preamble opened', color: COLORS.session },
+  { code: 'sp', name: 'strategy progress', color: COLORS.routing },
 ];
 const EVENT_TYPE_INDEX = new Map(EVENT_TYPES.map((eventType, index) => [eventType.code, index]));
 const VERDICT_NAMES = ['accepted', 'useless', 'not needed', 'invalid', 'duplicate', 'pending'];

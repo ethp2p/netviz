@@ -78,7 +78,7 @@ describe('validateDecoderOutput', () => {
 
     it('accepts optional milestones, messages, and eventTypes', () => {
       const output = makeValid({
-        milestones: [{ time: 500, label: 'mid', color: '#fff' }],
+        milestones: [{ time: 500, label: 'mid', color: [255, 255, 255, 255] as [number, number, number, number] }],
         messages: [{ id: 'm1', firstTs: 0, lastTs: 100, label: 'msg' }],
         eventTypes: [{ code: 'TX', name: 'Transaction' }],
       });

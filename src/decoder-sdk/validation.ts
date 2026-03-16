@@ -176,8 +176,8 @@ function validateEventTypes(eventTypes: EventTypeDef[] | undefined, issues: Deco
     if (typeof eventType.name !== 'string' || eventType.name.length === 0) {
       pushIssue(issues, path + '.name', 'must be a non-empty string');
     }
-    if (eventType.color !== undefined && typeof eventType.color !== 'string') {
-      pushIssue(issues, path + '.color', 'must be a string when provided');
+    if (eventType.color !== undefined && !isRgba(eventType.color)) {
+      pushIssue(issues, path + '.color', 'must be an RGBA tuple when provided');
     }
   });
 }
@@ -225,7 +225,7 @@ function validateMilestones(milestones: Milestone[], issues: DecoderValidationIs
     }
     if (!isFiniteNumber(milestone.time)) pushIssue(issues, path + '.time', 'must be a finite number');
     if (typeof milestone.label !== 'string') pushIssue(issues, path + '.label', 'must be a string');
-    if (typeof milestone.color !== 'string') pushIssue(issues, path + '.color', 'must be a CSS color string');
+    if (!isRgba(milestone.color)) pushIssue(issues, path + '.color', 'must be an RGBA tuple');
   });
 }
 
