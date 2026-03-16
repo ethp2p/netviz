@@ -1,4 +1,4 @@
-import { Deck, OrthographicView } from '@deck.gl/core';
+import { Deck, OrthographicView, OrbitView } from '@deck.gl/core';
 import type { OrthographicViewState } from '@deck.gl/core';
 import { ScatterplotLayer, LineLayer } from '@deck.gl/layers';
 import type { NodeData, ActiveArc, LayoutMode } from '../types';
@@ -15,12 +15,12 @@ function edgeColor(): [number, number, number, number] {
 }
 const SELECTION_COLOR: [number, number, number, number] = [255, 255, 255, 255];
 
-// deck.gl generic typing is strict; use Deck<OrthographicView> to match the view we pass.
-// Single instance — re-creating Deck on each file load resets the camera and leaks GL resources.
-let deckgl: Deck<OrthographicView> | null = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let deckgl: Deck<any> | null = null;
+let orbiting = false;
 
-export function initDeckGL(canvas: HTMLCanvasElement): Deck<OrthographicView> {
-  deckgl = new Deck<OrthographicView>({
+export function initDeckGL(canvas: HTMLCanvasElement): Deck {
+  deckgl = new Deck({
     canvas,
     views: new OrthographicView({ flipY: false }),
     initialViewState: {
@@ -29,13 +29,29 @@ export function initDeckGL(canvas: HTMLCanvasElement): Deck<OrthographicView> {
     } as OrthographicViewState,
     controller: true,
     layers: [],
-    getCursor: ({ isHovering }) => isHovering ? 'pointer' : 'grab',
+    getCursor: ({ isHovering }: { isHovering: boolean }) => isHovering ? 'pointer' : 'grab',
   });
+  orbiting = false;
   return deckgl;
 }
 
-export function getDeck(): Deck<OrthographicView> | null {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function getDeck(): Deck<any> | null {
   return deckgl;
+}
+
+export function setOrbitMode(enable: boolean): void {
+  if (!deckgl || enable === orbiting) return;
+  orbiting = enable;
+  deckgl.setProps({
+    views: enable
+      ? new OrbitView({ orbitAxis: 'Y' })
+      : new OrthographicView({ flipY: false }),
+  });
+}
+
+export function isOrbitMode(): boolean {
+  return orbiting;
 }
 
 export function fitViewToNodes(
@@ -65,13 +81,25 @@ export function fitViewToNodes(
   const zoomY = Math.log2((containerH - padding * 2) / rangeY);
   const zoom = Math.min(zoomX, zoomY);
 
-  deckgl.setProps({
-    initialViewState: {
-      target: [cx, cy, 0],
-      zoom,
-      transitionDuration: 500,
-    } as OrthographicViewState,
-  });
+  if (orbiting) {
+    deckgl.setProps({
+      initialViewState: {
+        target: [cx, cy, 0],
+        zoom,
+        rotationOrbit: 0,
+        rotationX: 30,
+        transitionDuration: 500,
+      } as Record<string, unknown>,
+    });
+  } else {
+    deckgl.setProps({
+      initialViewState: {
+        target: [cx, cy, 0],
+        zoom,
+        transitionDuration: 500,
+      } as OrthographicViewState,
+    });
+  }
 }
 
 export function buildLayers(
