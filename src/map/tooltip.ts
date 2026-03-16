@@ -1,4 +1,4 @@
-import type { NodeData } from '../types';
+import type { NodeData, Position3D } from '../types';
 import { P } from '../types';
 import { chrome } from '../theme';
 import type { StateDef, MetricDef, CanonicalHeader } from '../decoder-sdk';
@@ -8,7 +8,7 @@ import { getOverlayMetricGroups } from '../ui/overlay-groups';
 
 export interface NodeLayerDatum {
   index: number;
-  position: [number, number];
+  position: Position3D;
   color: [number, number, number, number];
   radius: number;
   state: number;

@@ -1,6 +1,6 @@
 import type { DecoderOutput, EventFilter } from './decoder-sdk';
 import type { RGBA } from './decoder-sdk';
-import type { LayoutMode, GraphSettings } from './types';
+import type { LayoutMode, Position3D, GraphSettings } from './types';
 import type { IncrementalState } from './state';
 import type { EventIndex } from './trace';
 import type { TopologyGraph } from './graph/topology';
@@ -29,7 +29,7 @@ export interface AppStore {
   topoGraph: TopologyGraph | null;
   eventIndex: EventIndex | null;
   incState: IncrementalState | null;
-  nodePositions: [number, number][];
+  nodePositions: Position3D[];
   nodeMeta: NodeMetadata | null;
   layoutMode: LayoutMode;
   originNode: number;

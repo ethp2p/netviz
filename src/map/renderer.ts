@@ -1,7 +1,7 @@
 import { Deck, OrthographicView, OrbitView } from '@deck.gl/core';
 import type { OrthographicViewState } from '@deck.gl/core';
-import { ScatterplotLayer, LineLayer } from '@deck.gl/layers';
-import type { NodeData, ActiveArc, LayoutMode } from '../types';
+import { ScatterplotLayer, LineLayer, PointCloudLayer } from '@deck.gl/layers';
+import type { NodeData, ActiveArc, LayoutMode, Position3D } from '../types';
 import { P, PULSE_RING_DURATION_US } from '../types';
 import { chrome } from '../theme';
 import type { CanonicalHeader, ArcLayerDef, RGBA, StateDef, MetricDef } from '../decoder-sdk';
@@ -56,42 +56,47 @@ export function isOrbitMode(): boolean {
 
 export function fitViewToNodes(
   container: HTMLElement,
-  positions: [number, number][],
+  positions: Position3D[],
 ): void {
   if (!deckgl || positions.length === 0) return;
 
-  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity;
   for (const p of positions) {
     if (p[0] < minX) minX = p[0];
     if (p[0] > maxX) maxX = p[0];
     if (p[1] < minY) minY = p[1];
     if (p[1] > maxY) maxY = p[1];
+    if (p[2] < minZ) minZ = p[2];
+    if (p[2] > maxZ) maxZ = p[2];
   }
 
   const cx = (minX + maxX) / 2;
   const cy = (minY + maxY) / 2;
+  const cz = (minZ + maxZ) / 2;
   const rangeX = (maxX - minX) || 100;
   const rangeY = (maxY - minY) || 100;
+  const rangeZ = (maxZ - minZ) || 0;
 
   const containerW = container.clientWidth;
   const containerH = container.clientHeight;
   const padding = 80;
 
-  const zoomX = Math.log2((containerW - padding * 2) / rangeX);
-  const zoomY = Math.log2((containerH - padding * 2) / rangeY);
-  const zoom = Math.min(zoomX, zoomY);
-
   if (orbiting) {
+    const maxRange = Math.max(rangeX, rangeY, rangeZ);
+    const zoom = Math.log2(Math.min(containerW, containerH) / (maxRange + padding * 2));
     deckgl.setProps({
       initialViewState: {
-        target: [cx, cy, 0],
+        target: [cx, cy, cz],
         zoom,
-        rotationOrbit: 0,
-        rotationX: 30,
+        rotationOrbit: -30,
+        rotationX: 45,
         transitionDuration: 500,
       } as Record<string, unknown>,
     });
   } else {
+    const zoomX = Math.log2((containerW - padding * 2) / rangeX);
+    const zoomY = Math.log2((containerH - padding * 2) / rangeY);
+    const zoom = Math.min(zoomX, zoomY);
     deckgl.setProps({
       initialViewState: {
         target: [cx, cy, 0],
@@ -104,7 +109,7 @@ export function fitViewToNodes(
 
 export function buildLayers(
   header: CanonicalHeader,
-  nodePositions: [number, number][],
+  nodePositions: Position3D[],
   nodeStates: NodeData[],
   arcBuckets: ActiveArc[][],      // one per arc layer
   arcLayers: ArcLayerDef[],
@@ -137,8 +142,8 @@ export function buildLayers(
   for (let i = 0; i < n; i++) {
     const ns = nodeStates[i];
     // In race mode, position nodes at bar tips for interactive picking
-    const pos: [number, number] = mode === 'race'
-      ? [ns.chunksHave * raceLaneWidth, nodePositions[i][1]]
+    const pos: Position3D = mode === 'race'
+      ? [ns.chunksHave * raceLaneWidth, nodePositions[i][1], 0]
       : nodePositions[i];
     const color: [number, number, number, number] = i === originNode
       ? originColor
@@ -161,7 +166,7 @@ export function buildLayers(
   }));
 
   // Arc particles: unified across all layers
-  const allDots: { position: [number, number]; color: [number, number, number, number]; radius: number }[] = [];
+  const allDots: { position: Position3D; color: [number, number, number, number]; radius: number }[] = [];
   for (let layer = 0; layer < arcBuckets.length; layer++) {
     const def = arcLayers[layer];
     if (!def) continue;
@@ -175,7 +180,7 @@ export function buildLayers(
       const tgt = nodePositions[arc.to];
       const ease = 1 - (1 - progress) * (1 - progress);
       allDots.push({
-        position: [src[0] + (tgt[0] - src[0]) * ease, src[1] + (tgt[1] - src[1]) * ease],
+        position: [src[0] + (tgt[0] - src[0]) * ease, src[1] + (tgt[1] - src[1]) * ease, src[2] + (tgt[2] - src[2]) * ease],
         color: [cR, cG, cB, Math.floor(180 * (1 - progress * 0.5))],
         radius: nodeRadius * def.radius,
       });
@@ -183,7 +188,7 @@ export function buildLayers(
   }
 
   // Pulse rings: trigger whenever lastChunkTime is recent
-  const pulseData: { position: [number, number]; radius: number; color: [number, number, number, number] }[] = [];
+  const pulseData: { position: Position3D; radius: number; color: [number, number, number, number] }[] = [];
   for (let i = 0; i < n; i++) {
     const ns = nodeStates[i];
     const timeSinceChunk = currentTime - ns.lastChunkTime;
@@ -198,7 +203,7 @@ export function buildLayers(
     }
   }
 
-  const selectionData: { position: [number, number]; radius: number }[] = [];
+  const selectionData: { position: Position3D; radius: number }[] = [];
   if (selectedNode >= 0 && selectedNode < n) {
     selectionData.push({
       position: nodePositions[selectedNode],
@@ -206,7 +211,8 @@ export function buildLayers(
     });
   }
 
-  const layers: (ScatterplotLayer | LineLayer)[] = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const layers: any[] = [];
   const isRace = mode === 'race';
 
   if (isRace) {
@@ -226,8 +232,8 @@ export function buildLayers(
     layers.push(new LineLayer({
       id: 'topology-edges',
       data: edgeData,
-      getSourcePosition: (d: { source: [number, number] }) => d.source,
-      getTargetPosition: (d: { target: [number, number] }) => d.target,
+      getSourcePosition: (d: { source: Position3D }) => d.source,
+      getTargetPosition: (d: { target: Position3D }) => d.target,
       getColor: edgeColor(),
       getWidth: 1,
       widthUnits: 'pixels',
@@ -235,22 +241,33 @@ export function buildLayers(
   }
 
   if (!isRace && allDots.length > 0) {
-    layers.push(new ScatterplotLayer({
-      id: 'arc-particles',
-      data: allDots,
-      getPosition: (d: { position: [number, number] }) => d.position,
-      getRadius: (d: { radius: number }) => d.radius,
-      getFillColor: (d: { color: [number, number, number, number] }) => d.color,
-      radiusUnits: 'common',
-      antialiasing: true,
-    }));
+    if (orbiting) {
+      layers.push(new PointCloudLayer({
+        id: 'arc-particles',
+        data: allDots,
+        getPosition: (d: { position: Position3D }) => d.position,
+        getColor: (d: { color: [number, number, number, number] }) => d.color,
+        getNormal: [0, 1, 0],
+        pointSize: 3,
+      }));
+    } else {
+      layers.push(new ScatterplotLayer({
+        id: 'arc-particles',
+        data: allDots,
+        getPosition: (d: { position: Position3D }) => d.position,
+        getRadius: (d: { radius: number }) => d.radius,
+        getFillColor: (d: { color: [number, number, number, number] }) => d.color,
+        radiusUnits: 'common',
+        antialiasing: true,
+      }));
+    }
   }
 
-  if (!isRace && pulseData.length > 0) {
+  if (!isRace && pulseData.length > 0 && !orbiting) {
     layers.push(new ScatterplotLayer({
       id: 'pulse-rings',
       data: pulseData,
-      getPosition: (d: { position: [number, number] }) => d.position,
+      getPosition: (d: { position: Position3D }) => d.position,
       getRadius: (d: { radius: number }) => d.radius,
       getFillColor: (d: { color: [number, number, number, number] }) => d.color,
       radiusUnits: 'common',
@@ -258,11 +275,11 @@ export function buildLayers(
     }));
   }
 
-  if (selectionData.length > 0) {
+  if (selectionData.length > 0 && !orbiting) {
     layers.push(new ScatterplotLayer({
       id: 'selection-ring',
       data: selectionData,
-      getPosition: (d: { position: [number, number] }) => d.position,
+      getPosition: (d: { position: Position3D }) => d.position,
       getRadius: (d: { radius: number }) => d.radius,
       getFillColor: [0, 0, 0, 0],
       getLineColor: SELECTION_COLOR,
@@ -274,39 +291,56 @@ export function buildLayers(
     }));
   }
 
-  layers.push(new ScatterplotLayer({
-    id: 'nodes',
-    data: nodeData,
-    getPosition: (d: NodeLayerDatum) => d.position,
-    getRadius: (d: NodeLayerDatum) => d.radius,
-    getFillColor: (d: NodeLayerDatum) => d.color,
-    radiusUnits: 'common',
-    antialiasing: true,
-    pickable: true,
-    onClick: (info: { object?: NodeLayerDatum }) => {
-      if (info.object) {
-        onNodeClick(info.object.index);
-      }
-    },
-    onHover: (info: { object?: NodeLayerDatum; x?: number; y?: number }) => {
-      if (info.object) {
-        const d = info.object;
-        tooltipEl.style.display = 'block';
-        tooltipEl.style.left = (info.x! + 12) + 'px';
-        tooltipEl.style.top = (info.y! - 8) + 'px';
-        // safe: renderNodeTooltip escapes all user-data strings with escapeHtml
-        tooltipEl.innerHTML = renderNodeTooltip(d, nodeStates[d.index], header, states, metrics, meta, currentTime);
-        onNodeHover(d.index);
-      } else {
-        tooltipEl.style.display = 'none';
-        onNodeHover(-1);
-      }
-    },
-    updateTriggers: {
-      getRadius: [selectedNode, currentTime],
-      getFillColor: [currentTime, originNode],
-    },
-  }));
+  const nodeClickHandler = (info: { object?: NodeLayerDatum }) => {
+    if (info.object) onNodeClick(info.object.index);
+  };
+  const nodeHoverHandler = (info: { object?: NodeLayerDatum; x?: number; y?: number }) => {
+    if (info.object) {
+      const d = info.object;
+      tooltipEl.style.display = 'block';
+      tooltipEl.style.left = (info.x! + 12) + 'px';
+      tooltipEl.style.top = (info.y! - 8) + 'px';
+      tooltipEl.innerHTML = renderNodeTooltip(d, nodeStates[d.index], header, states, metrics, meta, currentTime);
+      onNodeHover(d.index);
+    } else {
+      tooltipEl.style.display = 'none';
+      onNodeHover(-1);
+    }
+  };
+
+  if (orbiting) {
+    layers.push(new PointCloudLayer({
+      id: 'nodes',
+      data: nodeData,
+      getPosition: (d: NodeLayerDatum) => d.position,
+      getColor: (d: NodeLayerDatum) => d.color,
+      getNormal: [0, 1, 0],
+      pointSize: 6,
+      pickable: true,
+      onClick: nodeClickHandler,
+      onHover: nodeHoverHandler,
+      updateTriggers: {
+        getColor: [currentTime, originNode],
+      },
+    }));
+  } else {
+    layers.push(new ScatterplotLayer({
+      id: 'nodes',
+      data: nodeData,
+      getPosition: (d: NodeLayerDatum) => d.position,
+      getRadius: (d: NodeLayerDatum) => d.radius,
+      getFillColor: (d: NodeLayerDatum) => d.color,
+      radiusUnits: 'common',
+      antialiasing: true,
+      pickable: true,
+      onClick: nodeClickHandler,
+      onHover: nodeHoverHandler,
+      updateTriggers: {
+        getRadius: [selectedNode, currentTime],
+        getFillColor: [currentTime, originNode],
+      },
+    }));
+  }
 
   // Hover highlights on top of everything
   if (hoveredPeers.size > 0) {
@@ -319,8 +353,8 @@ export function buildLayers(
     layers.push(new LineLayer({
       id: 'hover-edges',
       data: hlEdges,
-      getSourcePosition: (d: { source: [number, number] }) => d.source,
-      getTargetPosition: (d: { target: [number, number] }) => d.target,
+      getSourcePosition: (d: { source: Position3D }) => d.source,
+      getTargetPosition: (d: { target: Position3D }) => d.target,
       getColor: [...P.hover.rgba.slice(0, 3), 120] as [number, number, number, number],
       getWidth: 2,
       widthUnits: 'pixels',
@@ -332,7 +366,7 @@ export function buildLayers(
     layers.push(new ScatterplotLayer({
       id: 'hover-peer-rings',
       data: peerRings,
-      getPosition: (d: { position: [number, number] }) => d.position,
+      getPosition: (d: { position: Position3D }) => d.position,
       getRadius: (d: { radius: number }) => d.radius,
       getFillColor: [0, 0, 0, 0],
       getLineColor: [...P.hover.rgba.slice(0, 3), 140] as [number, number, number, number],

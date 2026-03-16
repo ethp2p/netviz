@@ -1,4 +1,5 @@
-export type LayoutMode = 'force' | 'hops' | 'latency' | 'race';
+export type LayoutMode = 'force' | 'hops' | 'latency' | 'race' | 'force3d';
+export type Position3D = [number, number, number];
 
 export interface NodeData {
   state: number;           // index into DecoderOutput.states

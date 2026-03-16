@@ -1,7 +1,7 @@
 import type { AppStore } from '../store';
 import type { LayoutMode } from '../types';
 import { computeLayout } from '../map/layout';
-import { fitViewToNodes, setOrbitMode, isOrbitMode } from '../map/renderer';
+import { fitViewToNodes, setOrbitMode } from '../map/renderer';
 import { getEl } from './dom';
 
 export function initModeSwitcher(deps: {
@@ -11,28 +11,16 @@ export function initModeSwitcher(deps: {
   const { store, updateAll } = deps;
   const modeSwitcher = getEl('mode-switcher');
   const mapContainer = getEl('map-container');
-
   modeSwitcher.addEventListener('click', (e) => {
     const tab = (e.target as HTMLElement).closest('.mode-tab') as HTMLElement | null;
     if (!tab) return;
-
-    // 3D toggle: switches camera only, keeps current layout
-    if (tab.dataset.mode === '3d') {
-      const enabling = !isOrbitMode();
-      setOrbitMode(enabling);
-      tab.classList.toggle('active', enabling);
-      fitViewToNodes(mapContainer, store.nodePositions);
-      updateAll();
-      return;
-    }
-
     const mode = tab.dataset.mode as LayoutMode;
     if (mode === store.layoutMode) return;
 
     store.layoutMode = mode;
+    setOrbitMode(mode === 'force3d');
 
     for (const t of modeSwitcher.querySelectorAll('.mode-tab')) {
-      if (t === tab || (t as HTMLElement).dataset.mode === '3d') continue;
       t.classList.toggle('active', (t as HTMLElement).dataset.mode === mode);
     }
 

@@ -1,4 +1,4 @@
-import type { NodeData, LayoutMode } from '../types';
+import type { NodeData, LayoutMode, Position3D } from '../types';
 import type { RGBA } from '../decoder-sdk';
 import { P } from '../types';
 import { chrome } from '../theme';
@@ -12,7 +12,7 @@ export interface HoverHighlight {
 
 export function drawOverlay(
   ctx: CanvasRenderingContext2D,
-  nodePositions: [number, number][],
+  nodePositions: Position3D[],
   nodeStates: NodeData[],
   overlayMaxes: number[][],        // [metricIdx][nodeIdx]
   overlayMetricGroups: number[][], // metric indices per visual ring

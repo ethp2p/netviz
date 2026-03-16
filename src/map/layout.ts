@@ -1,6 +1,6 @@
 import { forceSimulation, forceManyBody, forceLink, forceCenter, forceCollide } from 'd3-force';
 import type { SimulationNodeDatum, SimulationLinkDatum } from 'd3-force';
-import type { LayoutMode } from '../types';
+import type { LayoutMode, Position3D } from '../types';
 import type { CanonicalHeader } from '../decoder-sdk';
 import { EVENT_STRIDE, OP_STATE } from '../decoder-sdk';
 import type { TopologyGraph } from '../graph/topology';
@@ -8,6 +8,8 @@ import { bfsHops, dijkstraLatency } from '../graph/algorithms';
 
 interface ForceNode extends SimulationNodeDatum {
   index: number;
+  z?: number;
+  vz?: number;
 }
 
 // Hop region data for overlay rendering (separators + labels).
@@ -33,9 +35,10 @@ export function computeLayout(
   originNode: number,
   viewportAspect = 1.5,
   graph?: TopologyGraph,
-): [number, number][] {
+): Position3D[] {
   switch (mode) {
     case 'force': return layoutForce(header);
+    case 'force3d': return computeLayout3D(header);
     case 'hops': return layoutHops(header, eventBuf, eventCount, decodedStateIdx, originNode, viewportAspect, graph);
     case 'latency': return layoutLatency(header, eventBuf, eventCount, decodedStateIdx, originNode, graph);
     case 'race': return layoutRace(header, eventBuf, eventCount, decodedStateIdx);
@@ -43,7 +46,7 @@ export function computeLayout(
 }
 
 // Force-directed layout with edge latency weighting.
-function layoutForce(header: CanonicalHeader): [number, number][] {
+function layoutForce(header: CanonicalHeader): Position3D[] {
   const n = header.nodes.length;
   const edges = header.edges;
 
@@ -90,9 +93,110 @@ function layoutForce(header: CanonicalHeader): [number, number][] {
     simulation.tick();
   }
 
-  const positions: [number, number][] = new Array(n);
+  const positions: Position3D[] = new Array(n);
   for (let i = 0; i < n; i++) {
-    positions[i] = [d3nodes[i].x!, d3nodes[i].y!];
+    positions[i] = [d3nodes[i].x!, d3nodes[i].y!, 0];
+  }
+  return positions;
+}
+
+// Pure 3D force simulation (not d3-force, which is 2D only).
+// Charge repulsion + edge attraction + centering, all in xyz equally.
+export function computeLayout3D(header: CanonicalHeader): Position3D[] {
+  const n = header.nodes.length;
+  const edges = header.edges;
+  const baseDist = Math.max(60, 600 / Math.sqrt(n));
+
+  let maxLat = 0;
+  for (const e of edges) {
+    const latMs = e.latency / 1000;
+    if (latMs > maxLat) maxLat = latMs;
+  }
+
+  // Fibonacci sphere initial placement
+  const radius = Math.min(400, n * 4);
+  const px = new Float64Array(n);
+  const py = new Float64Array(n);
+  const pz = new Float64Array(n);
+  const vx = new Float64Array(n);
+  const vy = new Float64Array(n);
+  const vz = new Float64Array(n);
+
+  for (let i = 0; i < n; i++) {
+    const phi = Math.acos(1 - 2 * (i + 0.5) / n);
+    const theta = Math.PI * (1 + Math.sqrt(5)) * i;
+    px[i] = radius * Math.sin(phi) * Math.cos(theta);
+    py[i] = radius * Math.sin(phi) * Math.sin(theta);
+    pz[i] = radius * Math.cos(phi);
+  }
+
+  const linkDist = edges.map(e =>
+    maxLat > 0 ? baseDist * (0.3 + 0.7 * ((e.latency / 1000) / maxLat)) : baseDist,
+  );
+
+  const chargeStrength = -1500;
+  const maxChargeDist = baseDist * 5;
+  const damping = 0.85;
+  const centerStrength = 0.005;
+  const linkStrength = 0.3;
+
+  for (let tick = 0; tick < 300; tick++) {
+    const alpha = 1 - tick / 300;
+
+    // Charge repulsion (all pairs, all axes)
+    for (let i = 0; i < n; i++) {
+      let fx = 0, fy = 0, fz = 0;
+      for (let j = 0; j < n; j++) {
+        if (i === j) continue;
+        const dx = px[i] - px[j];
+        const dy = py[i] - py[j];
+        const dz = pz[i] - pz[j];
+        const dist2 = dx * dx + dy * dy + dz * dz;
+        if (dist2 < 1 || dist2 > maxChargeDist * maxChargeDist) continue;
+        const dist = Math.sqrt(dist2);
+        const force = chargeStrength / dist2;
+        fx += force * dx / dist;
+        fy += force * dy / dist;
+        fz += force * dz / dist;
+      }
+      // Centering
+      fx -= centerStrength * px[i];
+      fy -= centerStrength * py[i];
+      fz -= centerStrength * pz[i];
+
+      vx[i] = (vx[i] + fx * alpha) * damping;
+      vy[i] = (vy[i] + fy * alpha) * damping;
+      vz[i] = (vz[i] + fz * alpha) * damping;
+    }
+
+    // Link attraction
+    for (let e = 0; e < edges.length; e++) {
+      const s = edges[e].source;
+      const t = edges[e].target;
+      const dx = px[t] - px[s];
+      const dy = py[t] - py[s];
+      const dz = pz[t] - pz[s];
+      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
+      const target = linkDist[e];
+      const force = (dist - target) / dist * linkStrength * alpha;
+      const fx = dx * force * 0.5;
+      const fy = dy * force * 0.5;
+      const fz = dz * force * 0.5;
+      vx[s] += fx; vy[s] += fy; vz[s] += fz;
+      vx[t] -= fx; vy[t] -= fy; vz[t] -= fz;
+    }
+
+    // Apply velocities
+    for (let i = 0; i < n; i++) {
+      px[i] += vx[i];
+      py[i] += vy[i];
+      pz[i] += vz[i];
+    }
+  }
+
+  const positions: Position3D[] = new Array(n);
+  for (let i = 0; i < n; i++) {
+    positions[i] = [px[i], py[i], pz[i]];
   }
   return positions;
 }
@@ -122,7 +226,7 @@ function layoutHops(
   originNode: number,
   viewportAspect: number,
   graph?: TopologyGraph,
-): [number, number][] {
+): Position3D[] {
   const n = header.nodes.length;
 
   const hopCount = graph
@@ -186,7 +290,7 @@ function layoutHops(
 
   // Place nodes in hex grid within each region, stretching row spacing
   // so every region fills the full height.
-  const positions: [number, number][] = new Array(n);
+  const positions: Position3D[] = new Array(n);
   let yMin = Infinity, yMax = -Infinity;
 
   for (let h = 0; h <= maxHop; h++) {
@@ -205,7 +309,7 @@ function layoutHops(
       const hexOff = (row % 2 === 1 && grid.cols > 1) ? nodeSpacing * 0.5 : 0;
       const px = left + col * nodeSpacing + hexOff;
       const py = top + row * effectiveRowH;
-      positions[g[j]] = [px, py];
+      positions[g[j]] = [px, py, 0];
       if (py < yMin) yMin = py;
       if (py > yMax) yMax = py;
     }
@@ -255,7 +359,7 @@ function layoutLatency(
   decodedStateIdx: number,
   originNode: number,
   graph?: TopologyGraph,
-): [number, number][] {
+): Position3D[] {
   const n = header.nodes.length;
 
   const dist = graph
@@ -302,9 +406,9 @@ function layoutLatency(
     }
   }
 
-  const positions: [number, number][] = new Array(n);
+  const positions: Position3D[] = new Array(n);
   for (let i = 0; i < n; i++) {
-    positions[i] = [d3nodes[i].x!, d3nodes[i].y!];
+    positions[i] = [d3nodes[i].x!, d3nodes[i].y!, 0];
   }
   return positions;
 }
@@ -343,7 +447,7 @@ function layoutRace(
   eventBuf: Float64Array,
   eventCount: number,
   decodedStateIdx: number,
-): [number, number][] {
+): Position3D[] {
   const n = header.nodes.length;
 
   const decodeTime = extractDecodeTimes(n, eventBuf, eventCount, decodedStateIdx);
@@ -354,9 +458,9 @@ function layoutRace(
   for (let j = 0; j < n; j++) rank[order[j]] = j;
 
   const rowHeight = Math.max(16, Math.min(30, 800 / n));
-  const positions: [number, number][] = new Array(n);
+  const positions: Position3D[] = new Array(n);
   for (let i = 0; i < n; i++) {
-    positions[i] = [0, rank[i] * rowHeight];
+    positions[i] = [0, rank[i] * rowHeight, 0];
   }
   return positions;
 }

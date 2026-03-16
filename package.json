@@ -13,6 +13,9 @@
   "dependencies": {
     "@deck.gl/core": "^9.2.11",
     "@deck.gl/layers": "^9.2.11",
+    "@deck.gl/mesh-layers": "^9.2.11",
+    "@luma.gl/gltf": "~9.2.6",
+    "@luma.gl/shadertools": "~9.2.6",
     "culori": "^4.0.2",
     "d3-force": "^3.0.0"
   },
@@ -20,7 +23,7 @@
     "@types/d3-force": "^3.0.10",
     "fake-indexeddb": "^6.2.5",
     "typescript": "^5.9.3",
-    "vite": "8",
+    "vite": "^8.0.0",
     "vitest": "^4.1.0"
   }
 }

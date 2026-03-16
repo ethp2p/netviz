@@ -195,7 +195,6 @@ input[type="range"]:focus-visible { outline-offset: 4px; }
 #mode-switcher { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 15; display: flex; gap: 0; background: color-mix(in srgb, var(--bg) 80%, transparent); backdrop-filter: blur(6px); border: 1px solid var(--border); border-radius: 2px; overflow: hidden; }
 .mode-tab { background: none; border: none; border-right: 1px solid var(--border); padding: 5px 14px; font-family: var(--font); font-size: 11px; font-weight: 500; color: var(--text2); cursor: pointer; transition: color 0.15s, background 0.15s; letter-spacing: 0.03em; }
 .mode-tab:last-child { border-right: none; }
-.mode-toggle { border-left: 1px solid var(--border); margin-left: -1px; }
 .mode-tab:hover { color: var(--text); background: color-mix(in srgb, var(--text) 5%, transparent); }
 .mode-tab.active { color: var(--text); background: color-mix(in srgb, var(--text) 8%, transparent); }
 

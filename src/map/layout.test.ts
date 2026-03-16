@@ -61,14 +61,16 @@ function eventsWithDecoded(nodeIdx: number, ts: number): { buf: Float64Array; co
   return { buf, count: 1 };
 }
 
-function isValidTuple(pos: unknown): pos is [number, number] {
+function isValidTuple(pos: unknown): pos is [number, number, number] {
   return (
     Array.isArray(pos) &&
-    pos.length === 2 &&
+    pos.length === 3 &&
     typeof pos[0] === 'number' &&
     typeof pos[1] === 'number' &&
+    typeof pos[2] === 'number' &&
     isFinite(pos[0]) &&
-    isFinite(pos[1])
+    isFinite(pos[1]) &&
+    isFinite(pos[2])
   );
 }
 

@@ -1,5 +1,5 @@
 import { ScatterplotLayer, LineLayer } from '@deck.gl/layers';
-import type { NodeData } from '../types';
+import type { NodeData, Position3D } from '../types';
 import { P } from '../types';
 import { chrome } from '../theme';
 import type { RGBA } from '../decoder-sdk';
@@ -7,7 +7,7 @@ import type { RGBA } from '../decoder-sdk';
 export function buildRaceLayers(
   nodeCount: number,
   nodeColors: RGBA[],
-  nodePositions: [number, number][],
+  nodePositions: Position3D[],
   nodeStates: NodeData[],
 ): (ScatterplotLayer | LineLayer)[] {
   const layers: (ScatterplotLayer | LineLayer)[] = [];
@@ -19,13 +19,13 @@ export function buildRaceLayers(
   const laneWidth = barWidth / maxChunks;
 
   // Lane grid lines
-  const gridLines: { source: [number, number]; target: [number, number]; color: [number, number, number, number] }[] = [];
+  const gridLines: { source: Position3D; target: Position3D; color: [number, number, number, number] }[] = [];
   const totalH = (n - 1) * rowH;
   for (let k = 0; k <= maxChunks; k++) {
     const x = k * laneWidth;
     gridLines.push({
-      source: [x, -rowH],
-      target: [x, totalH + rowH],
+      source: [x, -rowH, 0],
+      target: [x, totalH + rowH, 0],
       color: k === maxChunks
         ? [...P.idle.rgba.slice(0, 3), 120] as [number, number, number, number]
         : [...chrome.border.rgba.slice(0, 3), 80] as [number, number, number, number],
@@ -34,15 +34,15 @@ export function buildRaceLayers(
   layers.push(new LineLayer({
     id: 'race-grid',
     data: gridLines,
-    getSourcePosition: (d: { source: [number, number] }) => d.source,
-    getTargetPosition: (d: { target: [number, number] }) => d.target,
+    getSourcePosition: (d: { source: Position3D }) => d.source,
+    getTargetPosition: (d: { target: Position3D }) => d.target,
     getColor: (d: { color: [number, number, number, number] }) => d.color,
     getWidth: 1,
     widthUnits: 'pixels',
   }));
 
   // Progress bars (filled portion as thick horizontal lines)
-  const barLines: { source: [number, number]; target: [number, number]; color: [number, number, number, number] }[] = [];
+  const barLines: { source: Position3D; target: Position3D; color: [number, number, number, number] }[] = [];
   for (let i = 0; i < n; i++) {
     const ns = nodeStates[i];
     const have = ns.chunksHave;
@@ -52,8 +52,8 @@ export function buildRaceLayers(
     const c = nodeColors[ns.state] ?? nodeColors[0];
     const color: [number, number, number, number] = [c[0], c[1], c[2], 180];
     barLines.push({
-      source: [0, y],
-      target: [w, y],
+      source: [0, y, 0],
+      target: [w, y, 0],
       color,
     });
   }
@@ -61,8 +61,8 @@ export function buildRaceLayers(
     layers.push(new LineLayer({
       id: 'race-bars',
       data: barLines,
-      getSourcePosition: (d: { source: [number, number] }) => d.source,
-      getTargetPosition: (d: { target: [number, number] }) => d.target,
+      getSourcePosition: (d: { source: Position3D }) => d.source,
+      getTargetPosition: (d: { target: Position3D }) => d.target,
       getColor: (d: { color: [number, number, number, number] }) => d.color,
       getWidth: Math.max(4, rowH * 0.6),
       widthUnits: 'pixels',
