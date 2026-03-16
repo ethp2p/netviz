@@ -103,7 +103,7 @@ export function addYLabels(
       y: y + 3,
       'text-anchor': 'end',
       fill: chartLabelColor(),
-      'font-size': '9',
+      'font-size': '10', 'font-variant-numeric': 'tabular-nums',
       'font-family': cssFont(),
     });
     text.textContent = formatter(v);
