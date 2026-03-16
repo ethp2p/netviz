@@ -1,5 +1,6 @@
 import type { ChartData } from './data';
-import { scale, svgEl, stepPath, stepAreaPath, addYLabels, nearestIdx, addSlackOverlays, UP_COLOR, DOWN_COLOR } from './helpers';
+import { scale, svgEl, stepPath, stepAreaPath, addYLabels, nearestIdx, addSlackOverlays, UP_COLOR, DOWN_COLOR, chartLabelColor } from './helpers';
+import { chrome } from '../theme';
 import { finalizeScaffold, drawMirroredBase, drawMirroredAreas, computeMirroredScales, recreateRateOverlay } from './scaffold';
 import type { ChartScaffold, RateChartSlots } from './scaffold';
 import { drawPercentileBands, detectHoveredBand, bandTooltipHtml, wireMouseEvents } from './bands';
@@ -48,11 +49,11 @@ export function renderCdfChart(
     const ys = data.cdf.map(p => yScale(p.fraction));
     svg.appendChild(svgEl('path', {
       d: stepAreaPath(xs, ys, plotBottom),
-      fill: '#00ff88', 'fill-opacity': '0.15', stroke: 'none',
+      fill: chrome.green.css, 'fill-opacity': '0.15', stroke: 'none',
     }));
     svg.appendChild(svgEl('path', {
       d: stepPath(xs, ys),
-      fill: 'none', stroke: '#00ff88', 'stroke-width': '1.5',
+      fill: 'none', stroke: chrome.green.css, 'stroke-width': '1.5',
     }));
   }
 
@@ -69,7 +70,7 @@ export function renderCdfChart(
         else break;
       }
       return '<span class="tt-time">' + formatTime(Math.max(0, t)) + '</span><br>' +
-        '<span style="color:#00ff88">' + Math.round(frac * 100) + '% decoded</span>';
+        '<span style="color:' + chrome.green.css + '">' + Math.round(frac * 100) + '% decoded</span>';
     },
   });
 }

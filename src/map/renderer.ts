@@ -213,7 +213,7 @@ export function buildLayers(
       getPosition: (d: { position: [number, number] }) => d.position,
       getRadius: (d: { radius: number }) => d.radius,
       getFillColor: (d: { color: [number, number, number, number] }) => d.color,
-      radiusUnits: 'pixels',
+      radiusUnits: 'common',
       antialiasing: true,
     }));
   }
@@ -225,7 +225,7 @@ export function buildLayers(
       getPosition: (d: { position: [number, number] }) => d.position,
       getRadius: (d: { radius: number }) => d.radius,
       getFillColor: (d: { color: [number, number, number, number] }) => d.color,
-      radiusUnits: 'pixels',
+      radiusUnits: 'common',
       antialiasing: true,
     }));
   }
@@ -242,7 +242,7 @@ export function buildLayers(
       lineWidthUnits: 'pixels',
       stroked: true,
       filled: false,
-      radiusUnits: 'pixels',
+      radiusUnits: 'common',
     }));
   }
 
@@ -252,7 +252,7 @@ export function buildLayers(
     getPosition: (d: NodeLayerDatum) => d.position,
     getRadius: (d: NodeLayerDatum) => d.radius,
     getFillColor: (d: NodeLayerDatum) => d.color,
-    radiusUnits: 'pixels',
+    radiusUnits: 'common',
     antialiasing: true,
     pickable: true,
     onClick: (info: { object?: NodeLayerDatum }) => {
@@ -312,7 +312,7 @@ export function buildLayers(
       lineWidthUnits: 'pixels',
       stroked: true,
       filled: false,
-      radiusUnits: 'pixels',
+      radiusUnits: 'common',
     }));
   }
 

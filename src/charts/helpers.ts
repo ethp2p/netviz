@@ -1,3 +1,5 @@
+import { chrome } from '../theme';
+
 // Layout constants
 export const MARGIN = { top: 6, right: 6, bottom: 18, left: 40 };
 export const CDF_HEIGHT = 110;
@@ -12,6 +14,11 @@ export function cssFont(): string {
 // Colors
 export const UP_COLOR = '#00ddff';
 export const DOWN_COLOR = '#ff9944';
+
+export function chartGridColor(): string { return chrome.borderSubtle.css; }
+export function chartLabelColor(): string { return chrome.text3.css; }
+export function chartCrosshairColor(): string { return chrome.text.css; }
+export function chartSlackColor(): string { return chrome.bg.css; }
 
 // Band opacities from inner (p50) to outer (p99)
 export const BAND_OPACITIES = [0.55, 0.40, 0.30, 0.20, 0.12];
@@ -95,7 +102,7 @@ export function addYLabels(
       x: plotLeft - 4,
       y: y + 3,
       'text-anchor': 'end',
-      fill: '#71717a',
+      fill: chartLabelColor(),
       'font-size': '9',
       'font-family': cssFont(),
     });
@@ -104,7 +111,7 @@ export function addYLabels(
 
     svg.appendChild(svgEl('line', {
       x1: plotLeft, y1: y, x2: plotRight, y2: y,
-      stroke: '#27272a', 'stroke-width': '1',
+      stroke: chartGridColor(), 'stroke-width': '1', opacity: '0.5',
     }));
   }
 }
@@ -132,7 +139,7 @@ export function addSlackOverlays(
 ) {
   const [dMin, dMax] = dataRange;
   const [fMin, fMax] = focusRange;
-  const slackColor = '#18181b';
+  const slackColor = chartSlackColor();
   const slackOpacity = '0.7';
 
   if (fMin > dMin) {

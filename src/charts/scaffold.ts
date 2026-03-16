@@ -1,4 +1,4 @@
-import { svgEl, scale, areaPath, linePath, addYLabels, MARGIN, UP_COLOR, DOWN_COLOR, cssFont } from './helpers';
+import { svgEl, scale, areaPath, linePath, addYLabels, MARGIN, UP_COLOR, DOWN_COLOR, cssFont, chartCrosshairColor, chartGridColor, chartLabelColor } from './helpers';
 
 export interface ChartScaffold {
   svg: SVGSVGElement;
@@ -84,7 +84,7 @@ export function createChartScaffold(
 
   const timeMarker = svgEl('line', {
     x1: plotLeft, y1: plotTop, x2: plotLeft, y2: plotBottom,
-    stroke: '#ffffff', 'stroke-width': '1', 'stroke-dasharray': '3,3', opacity: '0.5',
+    stroke: chartCrosshairColor(), 'stroke-width': '1', 'stroke-dasharray': '3,3', opacity: '0.5',
   }) as SVGLineElement;
 
   const hoverLine = svgEl('line', {
@@ -125,7 +125,7 @@ export function drawMirroredBase(opts: MirroredBaseOpts): void {
 
   svg.appendChild(svgEl('line', {
     x1: plotLeft, y1: centerY, x2: plotRight, y2: centerY,
-    stroke: '#3f3f46', 'stroke-width': '1',
+    stroke: chartGridColor(), 'stroke-width': '1', opacity: '0.5',
   }));
 
   addYLabels(svg, [maxUp * 0.5, maxUp], yUp, formatY, plotLeft, plotRight);
@@ -185,7 +185,7 @@ export function recreateRateOverlay(
 
   const tm = svgEl('line', {
     x1: plotLeft, y1: plotTop, x2: plotLeft, y2: plotBottom,
-    stroke: '#ffffff', 'stroke-width': '1', 'stroke-dasharray': '3,3', opacity: '0.5',
+    stroke: chartCrosshairColor(), 'stroke-width': '1', 'stroke-dasharray': '3,3', opacity: '0.5',
   }) as SVGLineElement;
   replaceSlot(timeMarkers, slots, 'tmSlot', tm);
   svg.appendChild(tm);

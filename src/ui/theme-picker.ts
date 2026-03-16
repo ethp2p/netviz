@@ -45,28 +45,44 @@ export function initThemePicker(): ThemePicker {
     if (isOpen) rebuildDropdown();
   }
 
-  function rebuildDropdown() {
-    dropdownEl.replaceChildren();
-    for (const theme of THEMES) {
+  function addSection(label: string, themes: readonly Theme[]) {
+    const sectionLabel = document.createElement('div');
+    sectionLabel.className = 'dd-section-label';
+    sectionLabel.textContent = label;
+    dropdownEl.appendChild(sectionLabel);
+
+    for (const theme of themes) {
       const item = document.createElement('div');
       item.className = 'dd-item';
       if (theme.name === current.name) item.classList.add('active');
 
       const label = document.createElement('span');
       label.textContent = theme.name;
+      label.style.flex = '1';
       item.appendChild(label);
 
-      const swatch = document.createElement('span');
-      swatch.style.display = 'inline-block';
-      swatch.style.width = '8px';
-      swatch.style.height = '8px';
-      swatch.style.background = theme.bg;
-      swatch.style.border = '1px solid ' + theme.border;
-      swatch.style.flexShrink = '0';
-      item.appendChild(swatch);
+      if (theme.name === current.name) {
+        const check = document.createElement('span');
+        check.className = 'dd-check';
+        check.textContent = '\u2713';
+        item.appendChild(check);
+      }
 
       item.addEventListener('click', () => apply(theme));
       dropdownEl.appendChild(item);
+    }
+  }
+
+  function rebuildDropdown() {
+    dropdownEl.replaceChildren();
+    const dark = THEMES.filter(t => t.appearance === 'dark');
+    const light = THEMES.filter(t => t.appearance === 'light');
+    addSection('Dark', dark);
+    if (light.length > 0) {
+      const divider = document.createElement('div');
+      divider.className = 'dd-divider';
+      dropdownEl.appendChild(divider);
+      addSection('Light', light);
     }
   }
 

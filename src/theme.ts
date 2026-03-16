@@ -219,6 +219,9 @@ export const chrome = {
   text: hexToColor(stone.text),
   text2: hexToColor(stone.text2),
   text3: hexToColor(stone.text3),
+  accent: hexToColor(stone.accent),
+  green: hexToColor(stone.green),
+  red: hexToColor(stone.red),
 };
 
 export function updateChromePalette(theme: Theme): void {
@@ -229,6 +232,9 @@ export function updateChromePalette(theme: Theme): void {
   chrome.text = hexToColor(theme.text);
   chrome.text2 = hexToColor(theme.text2);
   chrome.text3 = hexToColor(theme.text3);
+  chrome.accent = hexToColor(theme.accent);
+  chrome.green = hexToColor(theme.green);
+  chrome.red = hexToColor(theme.red);
 }
 
 // ---------------------------------------------------------------------------
