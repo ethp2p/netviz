@@ -31,6 +31,8 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 #timeline-bar { position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); width: 60%; max-width: 600px; min-width: 280px; background: rgba(12,10,9,0.9); backdrop-filter: blur(8px); border: 1px solid var(--border); border-radius: 0; padding: 16px 20px; display: flex; flex-direction: column; gap: 8px; z-index: 20; }
 
 /* Toolbar */
+#github-link { margin-left: auto; color: var(--text2); display: flex; align-items: center; gap: 8px; font-family: var(--font); font-size: 12px; text-decoration: none; transition: color 0.15s; padding-left: 24px; }
+#github-link:hover { color: var(--text); }
 #toolbar label { font-family: var(--font); font-size: 13px; font-weight: 400; color: var(--text2); text-transform: uppercase; letter-spacing: 0.06em; cursor: pointer; }
 #toolbar input[type="file"] { display: none; }
 #file-label { padding: 4px 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-family: var(--font); font-size: 13px; font-weight: 500; cursor: pointer; transition: border-color 0.15s; }
