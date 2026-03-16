@@ -33,7 +33,7 @@ The decoder SDK defines the contract between trace formats and the visualization
 
 Six opcodes cover the event vocabulary: `OP_STATE` (node enters a state), `OP_TRANSFER` (data moves between nodes), `OP_PROGRESS` (chunks held vs. needed), `OP_METRIC` (arbitrary numeric), `OP_LINK` (connection up/down), `OP_LOG` (free-text entry). Every protocol-specific event maps to one of these.
 
-Decoding runs in a Web Worker so user-supplied decoders cannot block the UI. Trace data is streamed to the worker line-by-line via a TransformStream pipeline (decompress, text decode, line split), so the main thread never holds the full file in memory. User decoder `.js` files are validated in a temporary worker before being saved to IndexedDB. Output is validated at runtime against the schema.
+Decoding runs in a Web Worker so user-supplied decoders cannot block the UI. User decoder `.js` files are validated in a temporary worker before being saved to IndexedDB. Output is validated at runtime against the schema.
 
 ## Architecture
 

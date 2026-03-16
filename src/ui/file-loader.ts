@@ -17,9 +17,6 @@ import { getEl } from './dom';
 import { rebuildLegend } from './legend';
 import { getOverlayMetricGroups } from './overlay-groups';
 import { buildBundledDecoderPreview } from '../decoders/preview';
-import { createLineSplitter } from '../line-splitter';
-
-const LINE_BATCH_SIZE = 2000;
 
 export function initFileLoader(deps: {
   store: AppStore;
@@ -57,11 +54,10 @@ export function initFileLoader(deps: {
   const loadProgressFill = getEl('lp-fill');
 
   let worker: Worker | null = null;
+  let rawLines: string[] = [];
   let resolvedDecoder: ResolvedDecoder | null = null;
   let previewShown = false;
   let latestLoadToken = 0;
-  // Whether the worker has retained lines from the last streaming load.
-  let workerHasLines = false;
 
   function setLoadProgress(label: string, percent?: number, indeterminate = false): void {
     loadProgress.classList.add('visible');
@@ -126,7 +122,19 @@ export function initFileLoader(deps: {
     return worker;
   }
 
-  function setupWorkerHandlers(w: Worker): void {
+  function extractDecoderName(lines: string[]): string | undefined {
+    try {
+      const parsed = JSON.parse(lines[0] ?? '');
+      if (typeof parsed?.decoderName === 'string') return parsed.decoderName;
+    } catch {
+      // Not JSON or missing field
+    }
+    return undefined;
+  }
+
+  function runDecode(lines: string[], resolved: ResolvedDecoder, options?: DecodeOptions) {
+    const w = ensureWorker();
+
     w.onmessage = (e: MessageEvent<{ kind: 'progress'; label: string; percent?: number; indeterminate?: boolean } | { kind: 'result'; output: DecoderOutput } | { kind: 'error'; message: string }>) => {
       const message = e.data;
       if (message.kind === 'progress') {
@@ -153,110 +161,10 @@ export function initFileLoader(deps: {
       console.error('Decode worker error:', err);
       alert('Decoder failed: ' + err.message);
     };
-  }
 
-  /** Build a byte-counting TransformStream for progress reporting on compressed streams. */
-  function createProgressTracker(totalBytes: number, loadToken: number, label: string): TransformStream<Uint8Array, Uint8Array> {
-    let loaded = 0;
-    return new TransformStream<Uint8Array, Uint8Array>({
-      transform(chunk, controller) {
-        loaded += chunk.byteLength;
-        if (loadToken === latestLoadToken) {
-          setLoadProgress(label, 0.45 * (loaded / Math.max(1, totalBytes)));
-        }
-        controller.enqueue(chunk);
-      },
-    });
-  }
-
-  /**
-   * Stream lines from a byte source to the worker. Handles decompression,
-   * progress tracking, text decoding, and line splitting in a single pipeline.
-   * Sends lines to the worker in batches and fires the header callback on
-   * the first line for early preview rendering.
-   */
-  async function streamToWorker(
-    byteStream: ReadableStream<Uint8Array>,
-    loadToken: number,
-    resolved: ResolvedDecoder,
-    opts: {
-      compressed?: boolean;
-      totalBytes?: number;
-      progressLabel?: string;
-      onHeaderLine?: (line: string) => void;
-      options?: DecodeOptions;
-    },
-  ): Promise<void> {
-    const w = ensureWorker();
-    setupWorkerHandlers(w);
-
-    // Start streaming decode session
     w.postMessage({
-      kind: 'decode-start',
-      decoderSrc: resolved.kind === 'user' ? resolved.source : null,
-      decoderName: resolved.kind === 'bundled' ? resolved.name : undefined,
-      options: opts.options,
-    });
-
-    // Build the pipeline: [progress] → [decompress] → text decode → line split
-    let stream: ReadableStream<Uint8Array> = byteStream;
-
-    if (opts.totalBytes) {
-      stream = stream.pipeThrough(
-        createProgressTracker(opts.totalBytes, loadToken, opts.progressLabel ?? 'Reading trace...'),
-      );
-    }
-
-    if (opts.compressed) {
-      stream = stream.pipeThrough(new DecompressionStream('gzip') as TransformStream<Uint8Array, Uint8Array>);
-    }
-
-    const lineStream = stream
-      .pipeThrough(new TextDecoderStream() as TransformStream<Uint8Array, string>)
-      .pipeThrough(createLineSplitter());
-
-    const reader = lineStream.getReader();
-    let headerFired = false;
-    let batch: string[] = [];
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (loadToken !== latestLoadToken) {
-        reader.cancel();
-        return;
-      }
-
-      if (!headerFired) {
-        headerFired = true;
-        opts.onHeaderLine?.(value);
-      }
-
-      batch.push(value);
-      if (batch.length >= LINE_BATCH_SIZE) {
-        w.postMessage({ kind: 'decode-lines', lines: batch });
-        batch = [];
-      }
-    }
-
-    if (loadToken !== latestLoadToken) return;
-
-    // Flush remaining lines
-    if (batch.length > 0) {
-      w.postMessage({ kind: 'decode-lines', lines: batch });
-    }
-
-    setLoadProgress('Decoding...', 0.5);
-    w.postMessage({ kind: 'decode-end' });
-    workerHasLines = true;
-  }
-
-  /** Re-decode retained lines in the worker (for message re-selection or decoder switch). */
-  function reDecodeInWorker(resolved: ResolvedDecoder, options?: DecodeOptions): void {
-    const w = ensureWorker();
-    setupWorkerHandlers(w);
-    w.postMessage({
-      kind: 're-decode',
+      kind: 'decode',
+      lines,
       decoderSrc: resolved.kind === 'user' ? resolved.source : null,
       decoderName: resolved.kind === 'bundled' ? resolved.name : undefined,
       options,
@@ -456,23 +364,6 @@ export function initFileLoader(deps: {
     updateAll();
   }
 
-  function makeHeaderCallback(decoderName?: string): (line: string) => void {
-    return (line: string) => {
-      let rawHeader: Record<string, unknown>;
-      try {
-        rawHeader = JSON.parse(line) as Record<string, unknown>;
-      } catch {
-        return;
-      }
-      const name = decoderName ?? (typeof rawHeader.decoderName === 'string' ? rawHeader.decoderName : undefined);
-      if (!name) return;
-      const preview = buildBundledDecoderPreview(name, rawHeader);
-      if (!preview) return;
-      setLoadProgress('Drawing initial graph...', 0.18);
-      initPreviewVisualization(preview);
-    };
-  }
-
   getEl('load-example').addEventListener('click', async (e) => {
     e.preventDefault();
     latestLoadToken += 1;
@@ -485,14 +376,30 @@ export function initFileLoader(deps: {
       const resp = await fetch('/example-trace.bctrace.gz');
       if (!resp.ok || !resp.body) throw new Error(`HTTP ${resp.status}`);
       const total = Number(resp.headers.get('content-length') || 0);
+      const [progressStream, decompressStream] = resp.body.tee();
 
+      // Track download progress on one branch
+      const progressPromise = trackCompressedProgress(progressStream, total, loadToken);
+
+      // Decompress and read text on the other
+      const text = await readTextStream(
+        decompressStream.pipeThrough(new DecompressionStream('gzip')),
+        loadToken,
+        (line) => {
+          const preview = buildBundledDecoderPreview('ethp2p', JSON.parse(line) as Record<string, unknown>);
+          if (preview) {
+            setLoadProgress('Drawing initial graph...', 0.18);
+            initPreviewVisualization(preview);
+          }
+        },
+      );
+      await progressPromise;
+      if (loadToken !== latestLoadToken) return;
+
+      rawLines = text.split('\n');
       resolvedDecoder = { kind: 'bundled', name: 'ethp2p' };
-      await streamToWorker(resp.body, loadToken, resolvedDecoder, {
-        compressed: true,
-        totalBytes: total,
-        progressLabel: 'Downloading example trace...',
-        onHeaderLine: makeHeaderCallback('ethp2p'),
-      });
+      setLoadProgress('Decoding...', 0.5);
+      runDecode(rawLines, resolvedDecoder);
     } catch (err) {
       console.error('Failed to load example:', err);
       hideLoadProgress();
@@ -510,31 +417,14 @@ export function initFileLoader(deps: {
     setLoadProgress('Reading trace...', 0);
 
     try {
-      const compressed = file.name.endsWith('.gz');
-
-      // We need the header line to resolve the decoder before starting the
-      // streaming pipeline, but we also want to stream to the worker. Peek at
-      // the first line to extract the decoder name and show the preview, then
-      // resolve the decoder, then stream everything to the worker.
-      const headerLine = await peekHeaderLine(file, compressed);
+      const text = await readFileText(file, loadToken);
       if (loadToken !== latestLoadToken) return;
-
-      let decoderName: string | undefined;
-      try {
-        const parsed = JSON.parse(headerLine) as Record<string, unknown>;
-        decoderName = typeof parsed.decoderName === 'string' ? parsed.decoderName : undefined;
-      } catch { /* not JSON */ }
-
       setLoadProgress('Resolving decoder...', 0.48);
+      rawLines = text.split('\n');
+      const decoderName = extractDecoderName(rawLines);
       resolvedDecoder = await deps.picker.resolve(decoderName);
       if (loadToken !== latestLoadToken) return;
-
-      await streamToWorker(file.stream(), loadToken, resolvedDecoder, {
-        compressed,
-        totalBytes: file.size,
-        progressLabel: compressed ? 'Decompressing trace...' : 'Reading trace...',
-        onHeaderLine: makeHeaderCallback(),
-      });
+      runDecode(rawLines, resolvedDecoder);
     } catch (err) {
       console.error('Failed to load trace:', err);
       hideLoadProgress();
@@ -543,32 +433,111 @@ export function initFileLoader(deps: {
   });
 
   msgSelect.addEventListener('change', () => {
-    if (!resolvedDecoder || !workerHasLines) return;
+    if (!resolvedDecoder) return;
     store.playing = false;
     setLoadProgress('Decoding selected message...', undefined, true);
-    reDecodeInWorker(resolvedDecoder, { messageId: msgSelect.value });
+    runDecode(rawLines, resolvedDecoder, { messageId: msgSelect.value });
   });
 
   deps.picker.onSwitch = (decoder) => {
-    if (!workerHasLines) return;
+    if (rawLines.length === 0) return;
     resolvedDecoder = decoder;
     resetLoadingUi();
     setLoadProgress('Re-decoding with ' + decoder.name + '...', undefined, true);
-    reDecodeInWorker(decoder);
+    runDecode(rawLines, decoder);
   };
 
-  /** Read just the first line from a file (decompressing if needed) without buffering the whole file. */
-  async function peekHeaderLine(file: File, compressed: boolean): Promise<string> {
-    let stream: ReadableStream<Uint8Array> = file.stream();
-    if (compressed) {
-      stream = stream.pipeThrough(new DecompressionStream('gzip') as TransformStream<Uint8Array, Uint8Array>);
+  async function readFileText(file: File, loadToken: number): Promise<string> {
+    let headerParsed = false;
+
+    const onHeaderLine = (line: string) => {
+      if (headerParsed || loadToken !== latestLoadToken) return;
+      headerParsed = true;
+      let rawHeader: Record<string, unknown>;
+      try {
+        rawHeader = JSON.parse(line) as Record<string, unknown>;
+      } catch {
+        return;
+      }
+      const decoderName = typeof rawHeader.decoderName === 'string' ? rawHeader.decoderName : undefined;
+      if (!decoderName) return;
+      const preview = buildBundledDecoderPreview(decoderName, rawHeader);
+      if (!preview) return;
+      setLoadProgress('Drawing initial graph...', 0.18);
+      initPreviewVisualization(preview);
+    };
+
+    if (file.name.endsWith('.gz')) {
+      const [progressStream, textStream] = file.stream().tee();
+      const progressPromise = trackCompressedProgress(progressStream, file.size, loadToken);
+      const text = await readTextStream(textStream.pipeThrough(new DecompressionStream('gzip')), loadToken, onHeaderLine);
+      await progressPromise;
+      return text;
     }
-    const lineStream = stream
-      .pipeThrough(new TextDecoderStream() as TransformStream<Uint8Array, string>)
-      .pipeThrough(createLineSplitter());
-    const reader = lineStream.getReader();
-    const { value } = await reader.read();
-    reader.cancel();
-    return value ?? '';
+
+    return readTextStream(file.stream(), loadToken, onHeaderLine, file.size);
+  }
+
+  async function trackCompressedProgress(stream: ReadableStream<Uint8Array>, totalBytes: number, loadToken: number): Promise<void> {
+    const reader = stream.getReader();
+    let loaded = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done || value === undefined) break;
+      loaded += value.byteLength;
+      if (loadToken === latestLoadToken) {
+        setLoadProgress('Decompressing trace...', 0.45 * (loaded / Math.max(1, totalBytes)));
+      }
+    }
+  }
+
+  async function readTextStream(
+    stream: ReadableStream<Uint8Array>,
+    loadToken: number,
+    onHeaderLine: (line: string) => void,
+    totalBytes?: number,
+  ): Promise<string> {
+    const reader = stream.getReader();
+    const decoder = new TextDecoder();
+    const parts: string[] = [];
+    let loaded = 0;
+    let headerBuffer = '';
+    let headerDelivered = false;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done || value === undefined) break;
+      loaded += value.byteLength;
+      const chunk = decoder.decode(value, { stream: true });
+      if (chunk.length > 0) {
+        parts.push(chunk);
+        if (!headerDelivered) {
+          headerBuffer += chunk;
+          const newlineIdx = headerBuffer.indexOf('\n');
+          if (newlineIdx >= 0) {
+            headerDelivered = true;
+            onHeaderLine(headerBuffer.slice(0, newlineIdx));
+          }
+        }
+      }
+      if (loadToken === latestLoadToken && totalBytes) {
+        setLoadProgress('Reading trace...', 0.45 * (loaded / Math.max(1, totalBytes)));
+      }
+    }
+
+    const tail = decoder.decode();
+    if (tail.length > 0) {
+      parts.push(tail);
+      if (!headerDelivered) {
+        headerBuffer += tail;
+        const newlineIdx = headerBuffer.indexOf('\n');
+        if (newlineIdx >= 0) {
+          headerDelivered = true;
+          onHeaderLine(headerBuffer.slice(0, newlineIdx));
+        }
+      }
+    }
+
+    return parts.join('');
   }
 }
