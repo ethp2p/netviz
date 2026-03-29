@@ -194,10 +194,10 @@ describe('decode — bare node name aliasing', () => {
     // A cs event uses bare peer name "1"; it should resolve to node index 1.
     const lines = [
       header(),
-      event([1000, 0, 'ss', 'rs', 'msg1', 0]),
-      event([2000, 0, 'cs', '1', 'rs', 'msg1', 100]),
-      event([3000, 1, 'cr', 'n0', 'rs', 'msg1', 0]),
-      event([4000, 1, 'sd', 'rs', 'msg1', 3000]),
+      event([1000, 0, 'ss', 'broadcast', 'msg1', 0]),
+      event([2000, 0, 'cs', '1', 'broadcast', 'msg1', 100]),
+      event([3000, 1, 'cr', 'n0', 'broadcast', 'msg1', 0]),
+      event([4000, 1, 'sd', 'broadcast', 'msg1', 3000]),
     ];
     // Should not throw; the bare peer name "1" maps to node 1.
     expect(() => ethp2pDecoder.decode(lines)).not.toThrow();
@@ -211,11 +211,11 @@ describe('decode — bare node name aliasing', () => {
 describe('decode — message scanning', () => {
   const lines = makeTrace([
     header(),
-    event([1000, 0, 'ss', 'rs', 'msg-a', 0]),
-    event([2000, 1, 'cr', 'n0', 'rs', 'msg-a', 0]),
-    event([3000, 1, 'sd', 'rs', 'msg-a', 2000]),
-    event([5000, 0, 'ss', 'rs', 'msg-b', 0]),
-    event([6000, 1, 'sd', 'rs', 'msg-b', 1000]),
+    event([1000, 0, 'ss', 'broadcast', 'msg-a', 0]),
+    event([2000, 1, 'cr', 'n0', 'broadcast', 'msg-a', 0]),
+    event([3000, 1, 'sd', 'broadcast', 'msg-a', 2000]),
+    event([5000, 0, 'ss', 'broadcast', 'msg-b', 0]),
+    event([6000, 1, 'sd', 'broadcast', 'msg-b', 1000]),
   ]);
 
   it('discovers all distinct message IDs', () => {
@@ -253,8 +253,8 @@ describe('decode — message scanning', () => {
 describe('decode — ss event', () => {
   const lines = [
     header(),
-    event([1000, 0, 'ss', 'rs', 'msg1', 0]),
-    event([9999, 0, 'sd', 'rs', 'msg1', 8999]), // keep window open
+    event([1000, 0, 'ss', 'broadcast', 'msg1', 0]),
+    event([9999, 0, 'sd', 'broadcast', 'msg1', 8999]), // keep window open
   ];
 
   it('produces at least one event', () => {
@@ -316,8 +316,8 @@ describe('decode — ss event', () => {
 describe('decode — sd event', () => {
   const lines = [
     header(),
-    event([1000, 0, 'ss', 'rs', 'msg1', 0]),
-    event([4000, 1, 'sd', 'rs', 'msg1', 3000]),
+    event([1000, 0, 'ss', 'broadcast', 'msg1', 0]),
+    event([4000, 1, 'sd', 'broadcast', 'msg1', 3000]),
   ];
 
   it('transitions receiving node to decoded state (state index 3)', () => {
@@ -358,8 +358,8 @@ describe('decode — sx event', () => {
   it('decrements session count and reverts to idle if no decodes', () => {
     const lines = [
       header(),
-      event([1000, 0, 'ss', 'rs', 'msg1', 0]),
-      event([2000, 0, 'sx', 'rs', 'msg1', 'timeout']),
+      event([1000, 0, 'ss', 'broadcast', 'msg1', 0]),
+      event([2000, 0, 'sx', 'broadcast', 'msg1', 'timeout']),
     ];
     const out = ethp2pDecoder.decode(lines);
     const { buf } = out.events;
@@ -383,10 +383,10 @@ describe('decode — sx event', () => {
 describe('decode — cs / cr events', () => {
   const lines = [
     header(),
-    event([1000, 0, 'ss', 'rs', 'msg1', 0]),
-    event([1500, 0, 'cs', 'n1', 'rs', 'msg1', 1024]),
-    event([2000, 1, 'cr', 'n0', 'rs', 'msg1', 0]),  // verdict 0 = accepted
-    event([3000, 1, 'sd', 'rs', 'msg1', 2000]),
+    event([1000, 0, 'ss', 'broadcast', 'msg1', 0]),
+    event([1500, 0, 'cs', 'n1', 'broadcast', 'msg1', 1024]),
+    event([2000, 1, 'cr', 'n0', 'broadcast', 'msg1', 0]),  // verdict 0 = accepted
+    event([3000, 1, 'sd', 'broadcast', 'msg1', 2000]),
   ];
 
   it('emits a transfer arc for cs (OP_TRANSFER, layer 0)', () => {
@@ -473,10 +473,10 @@ describe('decode — cs / cr events', () => {
 describe('decode — cr verdict mapping', () => {
   const verdicts = [
     { v: 0, metricIdx: 0, name: 'accepted' },
-    { v: 1, metricIdx: 1, name: 'useless' },
-    { v: 2, metricIdx: 2, name: 'not_needed' },
-    { v: 3, metricIdx: 3, name: 'invalid' },
-    { v: 4, metricIdx: 4, name: 'duplicate' },
+    { v: 1, metricIdx: 1, name: 'redundant' },
+    { v: 2, metricIdx: 2, name: 'decoding' },
+    { v: 3, metricIdx: 3, name: 'surplus' },
+    { v: 4, metricIdx: 4, name: 'invalid' },
     { v: 5, metricIdx: 5, name: 'pending' },
   ];
 
@@ -484,9 +484,9 @@ describe('decode — cr verdict mapping', () => {
     it(`verdict ${v} (${name}) emits metric at index ${metricIdx}`, () => {
       const lines = [
         header(),
-        event([1000, 0, 'ss', 'rs', 'msg1', 0]),
-        event([2000, 1, 'cr', 'n0', 'rs', 'msg1', v]),
-        event([3000, 1, 'sd', 'rs', 'msg1', 2000]),
+        event([1000, 0, 'ss', 'broadcast', 'msg1', 0]),
+        event([2000, 1, 'cr', 'n0', 'broadcast', 'msg1', v]),
+        event([3000, 1, 'sd', 'broadcast', 'msg1', 2000]),
       ];
       const out = ethp2pDecoder.decode(lines);
       const { buf } = out.events;
@@ -509,9 +509,9 @@ describe('decode — cr verdict mapping', () => {
 describe('decode — sp event', () => {
   const lines = [
     header(),
-    event([1000, 0, 'ss', 'rs', 'msg1', 0]),
-    event([1500, 1, 'sp', 'rs', 'msg1', 3, 10]),
-    event([2000, 1, 'sd', 'rs', 'msg1', 1000]),
+    event([1000, 0, 'ss', 'broadcast', 'msg1', 0]),
+    event([1500, 1, 'sp', 'broadcast', 'msg1', 3, 10]),
+    event([2000, 1, 'sd', 'broadcast', 'msg1', 1000]),
   ];
 
   it('emits OP_PROGRESS with correct have/need values', () => {
@@ -533,25 +533,33 @@ describe('decode — sp event', () => {
 // ---------------------------------------------------------------------------
 
 describe('decode — ce event', () => {
-  it('transitions node to error state (state index 4)', () => {
-    // cr at ts=3000 extends msg1's lastTs beyond the ce timestamp so the ce
-    // event falls inside the selected message's time window.
+  it('treats ce as message-scoped and transitions node to error state (state index 4)', () => {
     const lines = [
       header(),
-      event([1000, 0, 'ss', 'rs', 'msg1', 0]),
-      event([2000, 1, 'ce', 'rs', 'msg1', 'decode_error']),
-      event([3000, 1, 'cr', 'n0', 'rs', 'msg1', 0]),
+      event([1000, 0, 'ss', 'broadcast', 'msg1', 0]),
+      event([1500, 1, 'ce', 'broadcast', 'msg2', 'other_error']),
+      event([2000, 1, 'ce', 'broadcast', 'msg1', 'decode_error']),
+      event([3000, 1, 'cr', 'n0', 'broadcast', 'msg1', 0]),
     ];
     const out = ethp2pDecoder.decode(lines);
-    const { buf } = out.events;
+    const { buf, logTexts } = out.events;
     const stateEvents: Array<{ nodeIdx: number; stateIdx: number }> = [];
+    const ceLogs: string[] = [];
     for (let i = 0; i < out.events.count; i++) {
       const base = i * EVENT_STRIDE;
       if (buf[base + 2] === OP_STATE) {
         stateEvents.push({ nodeIdx: buf[base + 1], stateIdx: buf[base + 3] });
       }
+      if (buf[base + 2] === OP_LOG) {
+        const text = logTexts[buf[base + 3]];
+        if (text.includes('decode_error') || text.includes('other_error')) {
+          ceLogs.push(text);
+        }
+      }
     }
     expect(stateEvents.some(e => e.nodeIdx === 1 && e.stateIdx === 4)).toBe(true);
+    expect(ceLogs.some(log => log.includes('decode_error'))).toBe(true);
+    expect(ceLogs.some(log => log.includes('other_error'))).toBe(false);
   });
 });
 
@@ -565,10 +573,10 @@ describe('decode — ph / pg peer lifecycle events', () => {
   // in the decoded output.
   const lines = [
     header(),
-    event([1000, 0, 'ss', 'rs', 'msg1', 0]),
-    event([1100, 0, 'ph', 'n1', 'eth/1']),
-    event([1500, 0, 'cs', 'n1', 'rs', 'msg1', 512]),
-    event([2000, 1, 'sd', 'rs', 'msg1', 1000]),
+    event([1000, 0, 'ss', 'broadcast', 'msg1', 0]),
+    event([1100, 0, 'ph', 'n1', 1, ['broadcast']]),
+    event([1500, 0, 'cs', 'n1', 'broadcast', 'msg1', 512]),
+    event([2000, 1, 'sd', 'broadcast', 'msg1', 1000]),
     event([1800, 0, 'pg', 'n1']),
   ];
 
@@ -606,10 +614,10 @@ describe('decode — ph / pg peer lifecycle events', () => {
 describe('decode — options.messageId', () => {
   const lines = [
     header(),
-    event([1000, 0, 'ss', 'rs', 'msg-a', 0]),
-    event([2000, 1, 'sd', 'rs', 'msg-a', 1000]),
-    event([5000, 0, 'ss', 'rs', 'msg-b', 0]),
-    event([6000, 1, 'sd', 'rs', 'msg-b', 1000]),
+    event([1000, 0, 'ss', 'broadcast', 'msg-a', 0]),
+    event([2000, 1, 'sd', 'broadcast', 'msg-a', 1000]),
+    event([5000, 0, 'ss', 'broadcast', 'msg-b', 0]),
+    event([6000, 1, 'sd', 'broadcast', 'msg-b', 1000]),
   ];
 
   it('selects msg-b when messageId is "msg-b"', () => {
@@ -685,17 +693,17 @@ describe('decode — constant output fields', () => {
 
 describe('decode — malformed event lines', () => {
   it('skips non-JSON lines without throwing', () => {
-    const lines = [header(), 'not json at all', event([1000, 0, 'ss', 'rs', 'msg1', 0]), event([2000, 0, 'sd', 'rs', 'msg1', 1000])];
+    const lines = [header(), 'not json at all', event([1000, 0, 'ss', 'broadcast', 'msg1', 0]), event([2000, 0, 'sd', 'broadcast', 'msg1', 1000])];
     expect(() => ethp2pDecoder.decode(lines)).not.toThrow();
   });
 
   it('skips too-short arrays without throwing', () => {
-    const lines = [header(), '[1000]', event([1000, 0, 'ss', 'rs', 'msg1', 0]), event([2000, 0, 'sd', 'rs', 'msg1', 1000])];
+    const lines = [header(), '[1000]', event([1000, 0, 'ss', 'broadcast', 'msg1', 0]), event([2000, 0, 'sd', 'broadcast', 'msg1', 1000])];
     expect(() => ethp2pDecoder.decode(lines)).not.toThrow();
   });
 
   it('skips unknown event codes gracefully', () => {
-    const lines = [header(), event([1000, 0, 'zz', 'rs', 'msg1', 0]), event([2000, 0, 'ss', 'rs', 'msg1', 0]), event([3000, 0, 'sd', 'rs', 'msg1', 1000])];
+    const lines = [header(), event([1000, 0, 'zz', 'broadcast', 'msg1', 0]), event([2000, 0, 'ss', 'broadcast', 'msg1', 0]), event([3000, 0, 'sd', 'broadcast', 'msg1', 1000])];
     expect(() => ethp2pDecoder.decode(lines)).not.toThrow();
   });
 });
@@ -707,10 +715,10 @@ describe('decode — malformed event lines', () => {
 describe('decode — milestones are sorted by time', () => {
   const lines = [
     header(),
-    event([1000, 0, 'ss', 'rs', 'msg1', 0]),
-    event([1200, 0, 'cs', 'n1', 'rs', 'msg1', 512]),
-    event([1400, 1, 'cr', 'n0', 'rs', 'msg1', 0]),
-    event([1800, 1, 'sd', 'rs', 'msg1', 800]),
+    event([1000, 0, 'ss', 'broadcast', 'msg1', 0]),
+    event([1200, 0, 'cs', 'n1', 'broadcast', 'msg1', 512]),
+    event([1400, 1, 'cr', 'n0', 'broadcast', 'msg1', 0]),
+    event([1800, 1, 'sd', 'broadcast', 'msg1', 800]),
   ];
 
   it('returns milestones in ascending time order', () => {

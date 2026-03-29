@@ -17,7 +17,24 @@ function validEthp2pHeader(): Record<string, unknown> {
       ],
       edges: [{ source: 0, target: 1, latency_ms: 20 }],
     },
-    cfg: {},
+    config: {},
+  };
+}
+
+function validGossipsubHeader(): Record<string, unknown> {
+  return {
+    v: 1,
+    t0: '2024-01-01T00:00:00Z',
+    nodes: ['n0', 'n1'],
+    peer_ids: ['peer-a', 'peer-b'],
+    topology: {
+      nodes: [
+        { num: 0, upload_bw_mbps: 10, download_bw_mbps: 10 },
+        { num: 1, upload_bw_mbps: 10, download_bw_mbps: 10 },
+      ],
+      edges: [{ source: 0, target: 1, latency_ms: 20 }],
+    },
+    config: {},
   };
 }
 
@@ -115,7 +132,7 @@ describe('buildBundledDecoderPreview — ethp2p single node', () => {
       nodes: [{ num: 0, upload_bw_mbps: 0, download_bw_mbps: 0 }],
       edges: [],
     },
-    cfg: {},
+    config: {},
   };
 
   it('handles a single-node topology without throwing', () => {
@@ -138,7 +155,7 @@ describe('buildBundledDecoderPreview — ethp2p legacy topology', () => {
     v: 1,
     nodes: ['n0', 'n1'],
     topology: [[0, 1]],
-    cfg: {},
+    config: {},
   };
 
   it('handles legacy array-of-pairs topology without throwing', () => {
@@ -161,8 +178,22 @@ describe('buildBundledDecoderPreview — ethp2p invalid version', () => {
       v: 99,
       nodes: [],
       topology: { nodes: [], edges: [] },
-      cfg: {},
+      config: {},
     };
     expect(() => buildBundledDecoderPreview('ethp2p', badHeader)).toThrow('Unsupported trace version');
+  });
+});
+
+describe('buildBundledDecoderPreview — gossipsub', () => {
+  it('returns non-null for a valid gossipsub header', () => {
+    const result = buildBundledDecoderPreview('gossipsub', validGossipsubHeader());
+    expect(result).not.toBeNull();
+  });
+
+  it('returns a preview with gossipsub-specific states', () => {
+    const result = buildBundledDecoderPreview('gossipsub', validGossipsubHeader());
+    const names = result!.states.map(s => s.name);
+    expect(names).toContain('origin');
+    expect(names).toContain('delivered');
   });
 });

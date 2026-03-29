@@ -134,6 +134,12 @@ export function buildLayers(
 
   // Arc particles: unified across all layers
   const allDots: { position: [number, number]; color: [number, number, number, number]; radius: number }[] = [];
+  const activeMessageEdges = new Map<string, {
+    source: [number, number];
+    target: [number, number];
+    color: [number, number, number, number];
+    width: number;
+  }>();
   for (let layer = 0; layer < arcBuckets.length; layer++) {
     const def = arcLayers[layer];
     if (!def) continue;
@@ -151,6 +157,20 @@ export function buildLayers(
         color: [cR, cG, cB, Math.floor(180 * (1 - progress * 0.5))],
         radius: nodeRadius * def.radius,
       });
+      if (layer === 0) {
+        const key = arc.from < arc.to ? `${arc.from}:${arc.to}` : `${arc.to}:${arc.from}`;
+        const alpha = Math.floor(120 + 100 * (1 - progress));
+        const width = 1.5 + 1.5 * (1 - progress);
+        const prev = activeMessageEdges.get(key);
+        if (!prev || alpha > prev.color[3]) {
+          activeMessageEdges.set(key, {
+            source: src,
+            target: tgt,
+            color: [cR, cG, cB, alpha],
+            width,
+          });
+        }
+      }
     }
   }
 
@@ -202,6 +222,18 @@ export function buildLayers(
       getTargetPosition: (d: { target: [number, number] }) => d.target,
       getColor: edgeColor(),
       getWidth: 1,
+      widthUnits: 'pixels',
+    }));
+  }
+
+  if (!isRace && activeMessageEdges.size > 0) {
+    layers.push(new LineLayer({
+      id: 'active-message-edges',
+      data: Array.from(activeMessageEdges.values()),
+      getSourcePosition: (d: { source: [number, number] }) => d.source,
+      getTargetPosition: (d: { target: [number, number] }) => d.target,
+      getColor: (d: { color: [number, number, number, number] }) => d.color,
+      getWidth: (d: { width: number }) => d.width,
       widthUnits: 'pixels',
     }));
   }
