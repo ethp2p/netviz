@@ -376,7 +376,7 @@ export function initFileLoader(deps: {
     setLoadProgress('Downloading example trace...', 0);
 
     try {
-      const resp = await fetch('/example-trace.bctrace.gz');
+      const resp = await fetch('/example-trace.bctrace.gz', { cache: 'no-cache' });
       if (!resp.ok || !resp.body) throw new Error(`HTTP ${resp.status}`);
       const total = Number(resp.headers.get('content-length') || 0);
 
