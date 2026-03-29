@@ -12,11 +12,11 @@ import {
 
 // ---------------------------------------------------------------------------
 // Field index where messageID lives, per event code.
-// Events without an entry here (ph, ps, pu, pg, ce) are "global" events
+// Events without an entry here (ph, ps, pu, pg) are "global" events
 // included by time window rather than message ID.
 // ---------------------------------------------------------------------------
 const MSG_ID_FIELD: Record<string, number> = {
-  ss: 4, sd: 4, sx: 4, sp: 4,
+  ss: 4, sd: 4, sx: 4, sp: 4, ce: 4,
   cs: 5, cr: 5, ru: 5, po: 5,
 };
 
@@ -34,8 +34,8 @@ const COLORS = {
   chunkSent: oklch(0.82, 0.14, 95),
   lastDecode: oklch(0.80, 0.10, 155),
   routing:   oklch(0.65, 0.10, 280),
-  useless:   oklch(0.72, 0.14, 60),
-  unused:    oklch(0.50, 0, 0),
+  redundant: oklch(0.72, 0.14, 60),
+  surplus:   oklch(0.50, 0, 0),
 } as const;
 
 const STATES: StateDef[] = defineStates([
@@ -53,10 +53,10 @@ const ARC_LAYERS: ArcLayerDef[] = defineArcLayers([
 
 const METRICS: MetricDef[] = defineMetrics([
   { name: 'accepted',      label: 'Accepted',      color: COLORS.decoded, overlay: 'ring', overlayGroup: 'accepted', overlayLabel: 'Useful',                statsGroup: 'Chunks received', statsOrder: 0 }, // 0
-  { name: 'useless',       label: 'Useless',       color: COLORS.useless, overlay: 'ring', overlayGroup: 'waste',    overlayLabel: 'Useless / duplicates', statsGroup: 'Chunks received', statsOrder: 1 }, // 1
-  { name: 'not_needed',    label: 'Not needed',    color: COLORS.unused,  overlay: 'ring', overlayGroup: 'unused',   overlayLabel: 'Unused',                statsGroup: 'Chunks received', statsOrder: 2 }, // 2
-  { name: 'invalid',       label: 'Invalid',                                                    statsGroup: 'Chunks received', statsOrder: 3 }, // 3
-  { name: 'duplicate',     label: 'Duplicate',     color: COLORS.useless, overlay: 'ring', overlayGroup: 'waste', overlayLabel: 'Useless / duplicates', statsGroup: 'Chunks received', statsOrder: 4 }, // 4
+  { name: 'redundant',     label: 'Redundant',     color: COLORS.redundant, overlay: 'ring', overlayGroup: 'waste', overlayLabel: 'Redundant',           statsGroup: 'Chunks received', statsOrder: 1 }, // 1
+  { name: 'decoding',      label: 'Decoding',      color: COLORS.receiving, overlay: 'ring', overlayGroup: 'late',  overlayLabel: 'During decode',       statsGroup: 'Chunks received', statsOrder: 2 }, // 2
+  { name: 'surplus',       label: 'Surplus',       color: COLORS.surplus,   overlay: 'ring', overlayGroup: 'unused', overlayLabel: 'After decode',       statsGroup: 'Chunks received', statsOrder: 3 }, // 3
+  { name: 'invalid',       label: 'Invalid',                                                     statsGroup: 'Chunks received', statsOrder: 4 }, // 4
   { name: 'pending',       label: 'Pending',                                                    statsGroup: 'Chunks received', statsOrder: 5 }, // 5
   { name: 'bytes_sent',    label: 'Bytes sent',    format: 'bytes',                             statsGroup: 'Transfer',        statsOrder: 0 }, // 6
   { name: 'chunks_sent',   label: 'Chunks sent',                                            statsGroup: 'Transfer',        statsOrder: 1 }, // 7
@@ -66,10 +66,10 @@ const METRICS: MetricDef[] = defineMetrics([
 // cr verdict → metric index
 const VERDICT_TO_METRIC: Record<number, number> = {
   0: 0, // accepted
-  1: 1, // useless
-  2: 2, // not_needed
-  3: 3, // invalid
-  4: 4, // duplicate
+  1: 1, // redundant
+  2: 2, // decoding
+  3: 3, // surplus
+  4: 4, // invalid
   5: 5, // pending
 };
 
@@ -81,15 +81,15 @@ const EVENT_TYPES: EventTypeDef[] = [
   { code: 'ss', name: 'session started', color: COLORS.receiving },
   { code: 'sd', name: 'session decoded', color: COLORS.decoded },
   { code: 'sx', name: 'session disposed', color: COLORS.session },
-  { code: 'cs', name: 'chunk sent', color: COLORS.useless },
-  { code: 'cr', name: 'chunk received', color: COLORS.useless },
+  { code: 'cs', name: 'chunk sent', color: COLORS.redundant },
+  { code: 'cr', name: 'chunk received', color: COLORS.redundant },
   { code: 'ce', name: 'chunk error', color: COLORS.error },
   { code: 'ru', name: 'routing update', color: COLORS.routing },
   { code: 'po', name: 'preamble opened', color: COLORS.session },
   { code: 'sp', name: 'strategy progress', color: COLORS.routing },
 ];
 const EVENT_TYPE_INDEX = new Map(EVENT_TYPES.map((eventType, index) => [eventType.code, index]));
-const VERDICT_NAMES = ['accepted', 'useless', 'not needed', 'invalid', 'duplicate', 'pending'];
+const VERDICT_NAMES = ['accepted', 'redundant', 'decoding', 'surplus', 'invalid', 'pending'];
 
 // State indices for readability
 const S_IDLE = 0;
@@ -126,7 +126,7 @@ interface RawHeader {
   t0: string;
   nodes: string[];
   topology: TraceTopology | [number, number][];
-  cfg: Record<string, unknown>;
+  config: Record<string, unknown>;
 }
 
 interface MessageScan {
@@ -206,7 +206,7 @@ function parseHeader(raw: Record<string, unknown>): {
 
   const meta: Record<string, unknown> = {};
   if (hdr.t0) meta['t0'] = hdr.t0;
-  if (hdr.cfg) meta['cfg'] = hdr.cfg;
+  if (hdr.config) meta['config'] = hdr.config;
 
   return {
     canonical: createHeader(nodes, edges, meta),
@@ -382,7 +382,7 @@ function selectAndMapEvents(
   }
 
   // Per-node tracking (counters, not keyed Sets: assumes no duplicate ss/sd
-  // events for the same strategy:messageId pair, which holds for well-formed traces)
+  // events for the same channel:messageId pair, which holds for well-formed traces)
   const sessions = new Uint16Array(nodeCount);
   const decodedCount = new Uint16Array(nodeCount);
   const nodeState = new Uint8Array(nodeCount); // tracks current state index per node
@@ -507,21 +507,23 @@ function selectAndMapEvents(
         if (peerIdx !== undefined) {
           writeHiddenLink(ts, nodeIdx, peerIdx, 1);
         }
-        writeVisible(ts, nodeIdx, 'ph', `peer=${peerName} v=${ev[4] as string}`, peerIdx ?? -1);
+        const channels = Array.isArray(ev[5]) ? (ev[5] as string[]).join(',') : '';
+        const channelSuffix = channels.length > 0 ? ` channels=${channels}` : '';
+        writeVisible(ts, nodeIdx, 'ph', `peer=${peerName} v=${String(ev[4])}${channelSuffix}`, peerIdx ?? -1);
         break;
       }
 
       case 'ps': {
         const peerName = ev[3] as string;
         const peerIdx = nameToIdx.get(peerName);
-        writeVisible(ts, nodeIdx, 'ps', `peer=${peerName} topic=${ev[4] as string}`, peerIdx ?? -1);
+        writeVisible(ts, nodeIdx, 'ps', `peer=${peerName} channel=${ev[4] as string}`, peerIdx ?? -1);
         break;
       }
 
       case 'pu': {
         const peerName = ev[3] as string;
         const peerIdx = nameToIdx.get(peerName);
-        writeVisible(ts, nodeIdx, 'pu', `peer=${peerName} topic=${ev[4] as string}`, peerIdx ?? -1);
+        writeVisible(ts, nodeIdx, 'pu', `peer=${peerName} channel=${ev[4] as string}`, peerIdx ?? -1);
         break;
       }
 

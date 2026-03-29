@@ -11,21 +11,21 @@ import { OP_STATE, OP_METRIC, OP_TRANSFER, OP_LOG, OP_PROGRESS, EVENT_STRIDE } f
 //   lines 1+: event arrays
 //
 // Header shape:
-//   { v: 1, t0: string, nodes: string[], topology: { nodes: TopoNodeSpec[], edges: TopoEdgeSpec[] }, cfg: {} }
+//   { v: 1, t0: string, nodes: string[], topology: { nodes: TopoNodeSpec[], edges: TopoEdgeSpec[] }, config: {} }
 //
 // Event array shape varies by code:
-//   ss: [ts, nodeIdx, 'ss', strategy, msgId, role]
-//   sd: [ts, nodeIdx, 'sd', strategy, msgId, latencyUs]
-//   sx: [ts, nodeIdx, 'sx', strategy, msgId, reason]
-//   sp: [ts, nodeIdx, 'sp', strategy, msgId, have, need]
-//   cs: [ts, nodeIdx, 'cs', peerName, strategy, msgId, bytes]
-//   cr: [ts, nodeIdx, 'cr', peerName, strategy, msgId, verdict]
-//   ce: [ts, nodeIdx, 'ce', strategy, msgId, reason]
-//   ph: [ts, nodeIdx, 'ph', peerName, version]
-//   ps: [ts, nodeIdx, 'ps', peerName, topic]
-//   pu: [ts, nodeIdx, 'pu', peerName, topic]
+//   ss: [ts, nodeIdx, 'ss', channel, msgId, role]
+//   sd: [ts, nodeIdx, 'sd', channel, msgId, latencyUs]
+//   sx: [ts, nodeIdx, 'sx', channel, msgId, reason]
+//   sp: [ts, nodeIdx, 'sp', channel, msgId, have, need]
+//   cs: [ts, nodeIdx, 'cs', peerName, channel, msgId, bytes]
+//   cr: [ts, nodeIdx, 'cr', peerName, channel, msgId, verdict]
+//   ce: [ts, nodeIdx, 'ce', channel, msgId, reason]
+//   ph: [ts, nodeIdx, 'ph', peerName, version, channels]
+//   ps: [ts, nodeIdx, 'ps', peerName, channel]
+//   pu: [ts, nodeIdx, 'pu', peerName, channel]
 //   pg: [ts, nodeIdx, 'pg', peerName]
-//   ru: [ts, nodeIdx, 'ru', peerName, strategy, msgId]
+//   ru: [ts, nodeIdx, 'ru', peerName, channel, msgId]
 
 function header(extra?: Record<string, unknown>): string {
   return JSON.stringify({
@@ -39,7 +39,7 @@ function header(extra?: Record<string, unknown>): string {
       ],
       edges: [{ source: 0, target: 1, latency_ms: 50 }],
     },
-    cfg: {},
+    config: {},
     ...extra,
   });
 }
@@ -118,10 +118,10 @@ describe('decode — minimal header, no events', () => {
     expect(out.messages).toHaveLength(0);
   });
 
-  it('stores t0 and cfg in header.meta', () => {
+  it('stores t0 and config in header.meta', () => {
     const out = ethp2pDecoder.decode(lines);
     expect(out.header.meta['t0']).toBe('2024-01-01T00:00:00Z');
-    expect(out.header.meta['cfg']).toBeDefined();
+    expect(out.header.meta['config']).toBeDefined();
   });
 });
 
@@ -135,7 +135,7 @@ describe('decode — legacy array-of-pairs topology', () => {
     t0: '2024-01-01T00:00:00Z',
     nodes: ['n0', 'n1'],
     topology: [[0, 1]],
-    cfg: {},
+    config: {},
   });
 
   it('normalizes legacy topology and produces edges', () => {
@@ -151,7 +151,7 @@ describe('decode — legacy array-of-pairs topology', () => {
 
 describe('decode — unsupported version', () => {
   it('throws for v !== 1', () => {
-    const badHeader = JSON.stringify({ v: 2, nodes: [], topology: { nodes: [], edges: [] }, cfg: {} });
+    const badHeader = JSON.stringify({ v: 2, nodes: [], topology: { nodes: [], edges: [] }, config: {} });
     expect(() => ethp2pDecoder.decode([badHeader, ''])).toThrow('Unsupported trace version');
   });
 });
@@ -166,14 +166,14 @@ describe('decode — header with missing optional fields', () => {
       v: 1,
       nodes: ['n0'],
       topology: { nodes: [{ num: 0, upload_bw_mbps: 0, download_bw_mbps: 0 }], edges: [] },
-      cfg: {},
+      config: {},
     });
     const out = ethp2pDecoder.decode([h, '']);
     expect(out.header.nodes).toHaveLength(1);
     expect(out.header.meta['t0']).toBeUndefined();
   });
 
-  it('handles missing cfg without throwing', () => {
+  it('handles missing config without throwing', () => {
     const h = JSON.stringify({
       v: 1,
       t0: '2024-01-01T00:00:00Z',
